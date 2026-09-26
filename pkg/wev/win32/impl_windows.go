@@ -26,8 +26,24 @@ type Window struct {
 
 func (w *Window) ID() uintptr { return w.hwnd }
 
+func (w *Window) HWND() uintptr { return w.hwnd }
+
+func (w *Window) Size() (int, int) {
+	var rect win32.RECT
+	if win32.GetClientRect(w.hwnd, &rect) == 0 {
+		return 0, 0
+	}
+	return int(rect.Right - rect.Left), int(rect.Bottom - rect.Top)
+}
+
+func (w *Window) DPI() int {
+	return int(win32.GetDpiForWindow(w.hwnd))
+}
+
 type Dispatcher interface {
 	CloseRequested(window *Window)
+	Resized(window *Window, width, height int)
+	DPIChanged(window *Window, dpi int)
 }
 
 type Backend struct {
@@ -39,6 +55,7 @@ type Backend struct {
 
 func NewBackend() (*Backend, error) {
 	b := &Backend{}
+	win32.SetProcessDpiAwarenessContext(win32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
 	b.instance = win32.GetModuleHandleW(nil)
 	if b.instance == 0 {
 		return nil, fmt.Errorf("wev: GetModuleHandleW failed: %d", win32.GetLastError())
@@ -95,8 +112,11 @@ func (b *Backend) DestroyWindow(window *Window) error {
 	return nil
 }
 
-func (b *Backend) Run(dispatcher Dispatcher) error {
+func (b *Backend) SetDispatcher(dispatcher Dispatcher) {
 	b.dispatcher = dispatcher
+}
+
+func (b *Backend) Run() error {
 	for {
 		var msg win32.MSG
 		r := win32.GetMessageW(&msg, 0, 0, 0)
@@ -117,6 +137,16 @@ func (b *Backend) PostQuit() {
 
 func (b *Backend) wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 	switch msg {
+	case win32.WM_SIZE:
+		if b.dispatcher != nil {
+			b.dispatcher.Resized(&Window{hwnd: hwnd}, int(win32.Loword(lParam)), int(win32.Hiword(lParam)))
+		}
+		return win32.DefWindowProcW(hwnd, msg, wParam, lParam)
+	case win32.WM_DPICHANGED:
+		if b.dispatcher != nil {
+			b.dispatcher.DPIChanged(&Window{hwnd: hwnd}, int(win32.Hiword(wParam)))
+		}
+		return win32.DefWindowProcW(hwnd, msg, wParam, lParam)
 	case win32.WM_CLOSE:
 		if b.dispatcher != nil {
 			b.dispatcher.CloseRequested(&Window{hwnd: hwnd})

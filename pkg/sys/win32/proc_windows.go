@@ -22,6 +22,10 @@ var (
 	DispatchMessageW func(msg *MSG) uintptr
 	PostQuitMessage  func(exitCode uint32)
 	LoadCursorW      func(instance uintptr, name uintptr) uintptr
+
+	GetClientRect                 func(hwnd uintptr, rect *RECT) int32
+	GetDpiForWindow               func(hwnd uintptr) uint32
+	SetProcessDpiAwarenessContext func(context uintptr) int32
 )
 
 func init() {
@@ -41,4 +45,7 @@ func init() {
 	purego.RegisterFunc(&DispatchMessageW, user32.NewProc("DispatchMessageW").Addr())
 	purego.RegisterFunc(&PostQuitMessage, user32.NewProc("PostQuitMessage").Addr())
 	purego.RegisterFunc(&LoadCursorW, user32.NewProc("LoadCursorW").Addr())
+	purego.RegisterFunc(&GetClientRect, user32.NewProc("GetClientRect").Addr())
+	purego.RegisterFunc(&GetDpiForWindow, user32.NewProc("GetDpiForWindow").Addr())
+	purego.RegisterFunc(&SetProcessDpiAwarenessContext, user32.NewProc("SetProcessDpiAwarenessContext").Addr())
 }

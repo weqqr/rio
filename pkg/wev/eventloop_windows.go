@@ -14,10 +14,12 @@ func NewEventLoop() *EventLoop {
 	if err != nil {
 		panic("wev: " + err.Error())
 	}
-	return &EventLoop{
+	e := &EventLoop{
 		platform: win32Platform{backend: backend},
 		windows:  make(map[uintptr]*Window),
 	}
+	backend.SetDispatcher(win32Dispatcher{dispatcher: e})
+	return e
 }
 
 type win32Platform struct {
@@ -40,8 +42,8 @@ func (p win32Platform) DestroyWindow(handle WindowHandle) error {
 	return p.backend.DestroyWindow(handle.(win32Handle).window)
 }
 
-func (p win32Platform) Run(dispatch Dispatcher) error {
-	return p.backend.Run(win32Dispatcher{dispatch})
+func (p win32Platform) Run() error {
+	return p.backend.Run()
 }
 
 func (p win32Platform) PostQuit() {
@@ -52,7 +54,12 @@ type win32Handle struct {
 	window *win32.Window
 }
 
-func (h win32Handle) id() uintptr { return h.window.ID() }
+func (h win32Handle) rawHandle() uintptr { return h.window.HWND() }
+func (h win32Handle) id() uintptr        { return h.window.ID() }
+
+func (h win32Handle) size() (int, int) { return h.window.Size() }
+
+func (h win32Handle) dpi() int { return h.window.DPI() }
 
 type win32Dispatcher struct {
 	dispatcher Dispatcher
@@ -60,4 +67,12 @@ type win32Dispatcher struct {
 
 func (d win32Dispatcher) CloseRequested(window *win32.Window) {
 	d.dispatcher.CloseRequested(win32Handle{window})
+}
+
+func (d win32Dispatcher) Resized(window *win32.Window, width, height int) {
+	d.dispatcher.WindowResized(win32Handle{window}, width, height)
+}
+
+func (d win32Dispatcher) DPIChanged(window *win32.Window, dpi int) {
+	d.dispatcher.WindowDPIChanged(win32Handle{window}, dpi)
 }

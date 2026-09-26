@@ -9,6 +9,11 @@ type POINT struct {
 	X, Y int32
 }
 
+type RECT struct {
+	_                        structs.HostLayout
+	Left, Top, Right, Bottom int32
+}
+
 type MSG struct {
 	_       structs.HostLayout
 	Hwnd    uintptr
@@ -36,7 +41,12 @@ type WNDCLASSEXW struct {
 }
 
 const (
+	WM_SIZE  = 0x0005
 	WM_CLOSE = 0x0010
+
+	WM_DPICHANGED = 0x02E0
+
+	DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 uintptr = ^uintptr(3)
 
 	WS_OVERLAPPEDWINDOW uintptr = 0x00CF0000
 
@@ -48,3 +58,7 @@ const (
 
 	IDC_ARROW uintptr = 32512
 )
+
+func Loword(v uintptr) uint16 { return uint16(v) }
+
+func Hiword(v uintptr) uint16 { return uint16(v >> 16) }

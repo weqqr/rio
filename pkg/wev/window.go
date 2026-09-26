@@ -12,6 +12,18 @@ type Window struct {
 }
 
 func (w *Window) Destroy() error {
-	delete(w.loop.windows, w.handle.id())
+	w.loop.removeWindow(w)
 	return w.loop.platform.DestroyWindow(w.handle)
+}
+
+func (w *Window) RawWindowHandle() uintptr {
+	return w.handle.rawHandle()
+}
+
+func (w *Window) Size() (width, height int) {
+	return w.handle.size()
+}
+
+func (w *Window) DPI() int {
+	return w.handle.dpi()
 }
