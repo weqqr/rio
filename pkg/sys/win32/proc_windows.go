@@ -12,6 +12,10 @@ var (
 	GetModuleHandleW func(name *uint16) uintptr
 	GetLastError     func() uint32
 
+	CreateEventW        func(attrs uintptr, manualReset uint32, initialState uint32, name uintptr) uintptr
+	WaitForSingleObject func(handle uintptr, milliseconds uint32) uint32
+	CloseHandle         func(handle uintptr) int32
+
 	RegisterClassExW func(wcx *WNDCLASSEXW) uint16
 	CreateWindowExW  func(exStyle uintptr, className, windowName *uint16, style uintptr, x, y, width, height int32, parent, menu, instance uintptr, param uintptr) uintptr
 	DefWindowProcW   func(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr
@@ -34,6 +38,10 @@ func init() {
 
 	purego.RegisterFunc(&GetModuleHandleW, kernel32.NewProc("GetModuleHandleW").Addr())
 	purego.RegisterFunc(&GetLastError, kernel32.NewProc("GetLastError").Addr())
+
+	purego.RegisterFunc(&CreateEventW, kernel32.NewProc("CreateEventW").Addr())
+	purego.RegisterFunc(&WaitForSingleObject, kernel32.NewProc("WaitForSingleObject").Addr())
+	purego.RegisterFunc(&CloseHandle, kernel32.NewProc("CloseHandle").Addr())
 
 	purego.RegisterFunc(&RegisterClassExW, user32.NewProc("RegisterClassExW").Addr())
 	purego.RegisterFunc(&CreateWindowExW, user32.NewProc("CreateWindowExW").Addr())

@@ -57,6 +57,11 @@ const (
 	COLOR_WINDOW uintptr = 5
 
 	IDC_ARROW uintptr = 32512
+
+	INFINITE uint32 = 0xFFFFFFFF
+
+	WAIT_OBJECT_0 uint32 = 0
+	WAIT_FAILED   uint32 = 0xFFFFFFFF
 )
 
 func Loword(v uintptr) uint16 { return uint16(v) }
