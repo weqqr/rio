@@ -1,5 +1,3 @@
-//go:build windows
-
 package d3d12
 
 import (
