@@ -9,3 +9,10 @@ tasks:
     desc: Run all tests
     cmds:
       - go test ./...
+  lint:
+    desc: Lint the code
+    cmds:
+      - golangci-lint run ./...
+  ci:
+    desc: Run lint and tests in parallel
+    deps: [lint, test]

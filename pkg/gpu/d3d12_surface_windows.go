@@ -61,8 +61,8 @@ func (s *d3d12Surface) Configure(device deviceBackend, config SurfaceConfigurati
 		if hr := s.factory.CreateSwapChainForHwnd(d3d12Device.queue.Object, s.target.Handle, &desc, nil, com.Object{}, &swapChain1); hr.Failed() {
 			return hr.Err()
 		}
-		object, err := swapChain1.Object.QueryInterface(&dxgi.IID_IDXGISwapChain3)
-		swapChain1.Object.Release()
+		object, err := swapChain1.QueryInterface(&dxgi.IID_IDXGISwapChain3)
+		swapChain1.Release()
 		if err != nil {
 			return err
 		}

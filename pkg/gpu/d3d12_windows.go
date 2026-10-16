@@ -64,28 +64,28 @@ func (a *d3d12Adapter) RequestDevice() (deviceBackend, error) {
 
 	queueDesc := d3d12.D3D12_COMMAND_QUEUE_DESC{Type: d3d12.D3D12_COMMAND_LIST_TYPE_DIRECT}
 	if hr := device.device.CreateCommandQueue(&queueDesc, &device.queue); hr.Failed() {
-		device.Close()
+		_ = device.Close()
 		return nil, hr.Err()
 	}
 	if hr := device.device.CreateCommandAllocator(d3d12.D3D12_COMMAND_LIST_TYPE_DIRECT, &device.allocator); hr.Failed() {
-		device.Close()
+		_ = device.Close()
 		return nil, hr.Err()
 	}
 	if hr := device.device.CreateCommandList(0, d3d12.D3D12_COMMAND_LIST_TYPE_DIRECT, device.allocator.Object, com.Object{}, &device.list); hr.Failed() {
-		device.Close()
+		_ = device.Close()
 		return nil, hr.Err()
 	}
 	if hr := device.list.Close(); hr.Failed() {
-		device.Close()
+		_ = device.Close()
 		return nil, hr.Err()
 	}
 	if hr := device.device.CreateFence(0, d3d12.D3D12_FENCE_FLAG_NONE, &device.fence); hr.Failed() {
-		device.Close()
+		_ = device.Close()
 		return nil, hr.Err()
 	}
 	device.fenceEvent = win32.CreateEventW(0, 0, 0, 0)
 	if device.fenceEvent == 0 {
-		device.Close()
+		_ = device.Close()
 		return nil, errWin32("CreateEventW")
 	}
 	return device, nil

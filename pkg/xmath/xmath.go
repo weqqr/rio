@@ -28,7 +28,7 @@ func (p Pos2) Sub(v Vec2) Pos2 { return Pos2{X: p.X - v.X, Y: p.Y - v.Y} }
 
 func (p Pos2) Delta(o Pos2) Vec2 { return Vec2{X: p.X - o.X, Y: p.Y - o.Y} }
 
-func (p Pos2) ToVec2() Vec2 { return Vec2{X: p.X, Y: p.Y} }
+func (p Pos2) ToVec2() Vec2 { return Vec2(p) }
 
 func (p Pos2) Lerp(o Pos2, t float32) Pos2 {
 	return Pos2{X: lerp(p.X, o.X, t), Y: lerp(p.Y, o.Y, t)}

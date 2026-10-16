@@ -48,7 +48,7 @@ func New(target gpu.SurfaceTarget) (*Renderer, error) {
 		},
 	}
 	if err := r.surface.Configure(r.device, r.config); err != nil {
-		r.Close()
+		_ = r.Close()
 		return nil, err
 	}
 	return r, nil
