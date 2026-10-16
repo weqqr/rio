@@ -4,21 +4,23 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/weqqr/rio/pkg/ui/view"
+	"github.com/weqqr/rio/pkg/xmath"
 )
 
-func white() view.Color { return view.Color{R: 1, G: 1, B: 1, A: 1} }
+func white() Rgba { return Rgba{R: 1, G: 1, B: 1, A: 1} }
 
-func positions(mesh Mesh) []view.Point {
-	out := make([]view.Point, 0, len(mesh.Vertices))
+func rect(min, max xmath.Pos2) xmath.Rect { return xmath.Rect{Min: min, Max: max} }
+
+func positions(mesh Mesh) []xmath.Pos2 {
+	out := make([]xmath.Pos2, 0, len(mesh.Vertices))
 	for _, vertex := range mesh.Vertices {
 		out = append(out, vertex.Pos)
 	}
 	return out
 }
 
-func uvs(mesh Mesh) []view.Point {
-	out := make([]view.Point, 0, len(mesh.Vertices))
+func uvs(mesh Mesh) []xmath.Pos2 {
+	out := make([]xmath.Pos2, 0, len(mesh.Vertices))
 	for _, vertex := range mesh.Vertices {
 		out = append(out, vertex.UV)
 	}
@@ -34,12 +36,12 @@ func textures(primitives []ClippedPrimitive) []TextureID {
 }
 
 func fill(canvas *Canvas, width, height float32) {
-	canvas.FillRect(view.Rect{Max: view.Point{X: width, Y: height}}, white())
+	canvas.FillRect(rect(xmath.Pos2{}, xmath.Pos2{X: width, Y: height}), white())
 }
 
 func TestFillRectTessellatesAQuad(t *testing.T) {
 	canvas := New(nil)
-	canvas.FillRect(view.Rect{Min: view.Point{X: 2, Y: 3}, Max: view.Point{X: 12, Y: 8}}, view.Color{R: 1, A: 0.5})
+	canvas.FillRect(rect(xmath.Pos2{X: 2, Y: 3}, xmath.Pos2{X: 12, Y: 8}), Rgba{R: 1, A: 0.5})
 
 	primitives := canvas.Primitives()
 	if len(primitives) != 1 {
@@ -71,7 +73,7 @@ func TestFillRectTessellatesAQuad(t *testing.T) {
 func TestConsecutiveFillsShareOneMesh(t *testing.T) {
 	canvas := New(nil)
 	fill(canvas, 4, 4)
-	canvas.FillRect(view.Rect{Min: view.Point{X: 4}, Max: view.Point{X: 8, Y: 4}}, white())
+	canvas.FillRect(rect(xmath.Pos2{X: 4}, xmath.Pos2{X: 8, Y: 4}), white())
 
 	primitives := canvas.Primitives()
 	if len(primitives) != 1 {
@@ -90,7 +92,7 @@ func TestGeometrySplitsByTexture(t *testing.T) {
 	renderer := NewStubText()
 	canvas := New(renderer)
 	fill(canvas, 4, 4)
-	canvas.DrawText("ab", view.TextStyle{Size: 16}, view.Point{X: 4, Y: 5})
+	canvas.DrawText("ab", TextStyle{Size: 16}, xmath.Pos2{X: 4, Y: 5})
 	fill(canvas, 2, 2)
 
 	primitives := canvas.Primitives()
@@ -116,8 +118,8 @@ func TestGeometrySplitsByTexture(t *testing.T) {
 }
 
 func TestClipStartsANewPrimitive(t *testing.T) {
-	first := view.Rect{Max: view.Point{X: 10, Y: 10}}
-	second := view.Rect{Min: view.Point{X: 10}, Max: view.Point{X: 20, Y: 10}}
+	first := rect(xmath.Pos2{}, xmath.Pos2{X: 10, Y: 10})
+	second := rect(xmath.Pos2{X: 10}, xmath.Pos2{X: 20, Y: 10})
 	canvas := New(nil)
 	canvas.SetClip(first)
 	fill(canvas, 4, 4)
@@ -142,11 +144,11 @@ func TestClipStartsANewPrimitive(t *testing.T) {
 
 func TestInvisibleGeometryIsSkipped(t *testing.T) {
 	canvas := New(nil)
-	canvas.FillRect(view.Rect{Max: view.Point{X: 4, Y: 4}}, view.Color{})
-	canvas.FillRect(view.Rect{Min: view.Point{X: 2}, Max: view.Point{X: 2, Y: 4}}, white())
-	canvas.FillRect(view.Rect{Max: view.Point{X: 4, Y: -1}}, white())
-	canvas.DrawText("", view.TextStyle{}, view.Point{})
-	canvas.DrawText("no renderer", view.TextStyle{}, view.Point{})
+	canvas.FillRect(rect(xmath.Pos2{}, xmath.Pos2{X: 4, Y: 4}), Rgba{})
+	canvas.FillRect(rect(xmath.Pos2{X: 2}, xmath.Pos2{X: 2, Y: 4}), white())
+	canvas.FillRect(rect(xmath.Pos2{}, xmath.Pos2{X: 4, Y: -1}), white())
+	canvas.DrawText("", TextStyle{}, xmath.Pos2{})
+	canvas.DrawText("no renderer", TextStyle{}, xmath.Pos2{})
 
 	if got := len(canvas.Primitives()); got != 0 {
 		t.Fatalf("primitives = %d, want none", got)
@@ -155,11 +157,11 @@ func TestInvisibleGeometryIsSkipped(t *testing.T) {
 
 func TestStubTextLayout(t *testing.T) {
 	renderer := NewStubText()
-	if id, size := renderer.Atlas(); id != 1 || size != (view.Size{Width: 1, Height: 1}) {
+	if id, size := renderer.Atlas(); id != 1 || size != (xmath.Vec2{X: 1, Y: 1}) {
 		t.Fatalf("atlas = %d %v, want texture 1 of 1x1", id, size)
 	}
-	layout := renderer.Layout("ab\nc", view.TextStyle{Size: 16})
-	if layout.Size != (view.Size{Width: 16, Height: 32}) {
+	layout := renderer.Layout("ab\nc", TextStyle{Size: 16})
+	if layout.Size != (xmath.Vec2{X: 16, Y: 32}) {
 		t.Fatalf("layout size = %v, want {16 32}", layout.Size)
 	}
 	var got []string
@@ -172,31 +174,32 @@ func TestStubTextLayout(t *testing.T) {
 	}
 }
 
-func TestMeasurerFollowsTheRenderer(t *testing.T) {
-	renderer := NewStubText()
-	style := view.TextStyle{Size: 20}
-	measured := Measurer(renderer).Measure("abc", style, view.Constraints{})
-	if measured != (view.Size{Width: 30, Height: 20}) {
-		t.Fatalf("measured = %v, want {30 20}", measured)
-	}
-	if measured != renderer.Layout("abc", style).Size {
-		t.Fatal("measured size differs from the laid out size")
+type fakeText struct{}
+
+func (fakeText) Atlas() (TextureID, xmath.Vec2) { return 7, xmath.Vec2{X: 64, Y: 64} }
+
+func (fakeText) Layout(text string, style TextStyle) TextLayout {
+	return TextLayout{
+		Size: xmath.Vec2{X: 4, Y: 6},
+		Glyphs: []Glyph{{
+			UV:   rect(xmath.Pos2{X: 0.25, Y: 0.5}, xmath.Pos2{X: 0.5, Y: 0.75}),
+			Pos:  xmath.Pos2{X: 2, Y: 3},
+			Size: xmath.Vec2{X: 4, Y: 6},
+		}},
 	}
 }
 
-type fakeText struct{}
-
 type emptyText struct{}
 
-func (emptyText) Atlas() (TextureID, view.Size) { return 3, view.Size{Width: 8, Height: 8} }
+func (emptyText) Atlas() (TextureID, xmath.Vec2) { return 3, xmath.Vec2{X: 8, Y: 8} }
 
-func (emptyText) Layout(text string, style view.TextStyle) TextLayout {
-	return TextLayout{Size: view.Size{Width: 4}, Glyphs: []Glyph{{Size: view.Size{Width: 4}}}}
+func (emptyText) Layout(text string, style TextStyle) TextLayout {
+	return TextLayout{Size: xmath.Vec2{X: 4}, Glyphs: []Glyph{{Size: xmath.Vec2{X: 4}}}}
 }
 
 func TestGlyphsWithoutGeometryAreSkipped(t *testing.T) {
 	canvas := New(emptyText{})
-	canvas.DrawText("a", view.TextStyle{Size: 16}, view.Point{})
+	canvas.DrawText("a", TextStyle{Size: 16}, xmath.Pos2{})
 	if got := len(canvas.Primitives()); got != 0 {
 		t.Fatalf("primitives = %d, want none for a text without geometry", got)
 	}
@@ -207,23 +210,10 @@ func TestGlyphsWithoutGeometryAreSkipped(t *testing.T) {
 	}
 }
 
-func (fakeText) Atlas() (TextureID, view.Size) { return 7, view.Size{Width: 64, Height: 64} }
-
-func (fakeText) Layout(text string, style view.TextStyle) TextLayout {
-	return TextLayout{
-		Size: view.Size{Width: 4, Height: 6},
-		Glyphs: []Glyph{{
-			UV:   view.Rect{Min: view.Point{X: 0.25, Y: 0.5}, Max: view.Point{X: 0.5, Y: 0.75}},
-			Pos:  view.Point{X: 2, Y: 3},
-			Size: view.Size{Width: 4, Height: 6},
-		}},
-	}
-}
-
 func TestCanvasHonoursTheRenderer(t *testing.T) {
 	canvas := New(fakeText{})
-	canvas.SetTextColor(view.Color{G: 1, A: 1})
-	canvas.DrawText("x", view.TextStyle{Size: 16}, view.Point{X: 10, Y: 20})
+	canvas.SetTextColor(Rgba{G: 1, A: 1})
+	canvas.DrawText("x", TextStyle{Size: 16}, xmath.Pos2{X: 10, Y: 20})
 
 	primitives := canvas.Primitives()
 	if len(primitives) != 1 {
@@ -246,9 +236,9 @@ func TestCanvasHonoursTheRenderer(t *testing.T) {
 
 func TestClearReusesBuffersAndResetsState(t *testing.T) {
 	canvas := New(NewStubText())
-	canvas.SetClip(view.Rect{Max: view.Point{X: 5, Y: 5}})
-	canvas.SetTextColor(view.Color{R: 1, A: 1})
-	canvas.DrawText("a", view.TextStyle{Size: 16}, view.Point{})
+	canvas.SetClip(rect(xmath.Pos2{}, xmath.Pos2{X: 5, Y: 5}))
+	canvas.SetTextColor(Rgba{R: 1, A: 1})
+	canvas.DrawText("a", TextStyle{Size: 16}, xmath.Pos2{})
 	capacity := cap(canvas.Primitives()[0].Mesh.Vertices)
 
 	canvas.Clear()
@@ -274,13 +264,13 @@ func TestClearReusesBuffersAndResetsState(t *testing.T) {
 
 func TestColor32IsPremultiplied(t *testing.T) {
 	cases := []struct {
-		in   view.Color
+		in   Rgba
 		want string
 	}{
-		{view.Color{R: 1, G: 1, B: 1, A: 1}, "255,255,255,255"},
-		{view.Color{R: 1, A: 0.5}, "128,0,0,128"},
-		{view.Color{R: 1, G: 1, B: 1}, "0,0,0,0"},
-		{view.Color{R: 2, G: -1, B: 0.5, A: 2}, "255,0,128,255"},
+		{Rgba{R: 1, G: 1, B: 1, A: 1}, "255,255,255,255"},
+		{Rgba{R: 1, A: 0.5}, "128,0,0,128"},
+		{Rgba{R: 1, G: 1, B: 1}, "0,0,0,0"},
+		{Rgba{R: 2, G: -1, B: 0.5, A: 2}, "255,0,128,255"},
 	}
 	for _, test := range cases {
 		r, g, b, a := FromColor(test.in).RGBA()
@@ -291,39 +281,5 @@ func TestColor32IsPremultiplied(t *testing.T) {
 	}
 	if got, want := fmt.Sprint(RGBA(1, 2, 3, 4).RGBA()), "1 2 3 4"; got != want {
 		t.Fatalf("RGBA round trip = %s, want %s", got, want)
-	}
-}
-
-func TestCompositionTessellatesThroughTheCanvas(t *testing.T) {
-	renderer := NewStubText()
-	comp := view.New(&view.Config{TextMeasurer: Measurer(renderer)})
-	comp.SetContent(func(c *view.Scope) {
-		c.Column(func(c *view.Scope) {
-			c.Text("hi")
-			c.Spacer(view.Sized(10, 5), view.Background(view.Color{G: 1, A: 1}))
-		}, view.Padding(1))
-	})
-
-	canvas := New(renderer)
-	if got, want := comp.Measure(view.Unbounded), (view.Size{Width: 18, Height: 23}); got != want {
-		t.Fatalf("size = %v, want %v", got, want)
-	}
-	comp.Draw(canvas)
-
-	primitives := canvas.Primitives()
-	if len(primitives) != 2 {
-		t.Fatalf("primitives = %d, want text then background", len(primitives))
-	}
-	if primitives[0].Mesh.Texture != 1 || primitives[1].Mesh.Texture != SolidTexture {
-		t.Fatalf("textures = %s, want [1 0]", fmt.Sprint(textures(primitives)))
-	}
-	if got, want := fmt.Sprint(positions(primitives[0].Mesh)), "[{1 1} {9 1} {9 17} {1 17} {9 1} {17 1} {17 17} {9 17}]"; got != want {
-		t.Fatalf("glyph positions = %s, want %s", got, want)
-	}
-	if got, want := fmt.Sprint(positions(primitives[1].Mesh)), "[{1 17} {11 17} {11 22} {1 22}]"; got != want {
-		t.Fatalf("background positions = %s, want %s", got, want)
-	}
-	if primitives[1].Mesh.Vertices[0].Color != RGBA(0, 255, 0, 255) {
-		t.Fatalf("background colour = %v, want opaque green", primitives[1].Mesh.Vertices[0].Color)
 	}
 }

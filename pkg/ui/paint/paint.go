@@ -3,7 +3,7 @@ package paint
 import (
 	"math"
 
-	"github.com/weqqr/rio/pkg/ui/view"
+	"github.com/weqqr/rio/pkg/xmath"
 )
 
 type TextureID uint32
@@ -13,13 +13,17 @@ const SolidTexture TextureID = 0
 const infinite = float32(math.MaxFloat32)
 
 var (
-	SolidUV          = view.Rect{Max: view.Point{X: 1, Y: 1}}
-	SolidTextureSize = view.Size{Width: 1, Height: 1}
-	Unclipped        = view.Rect{
-		Min: view.Point{X: -infinite, Y: -infinite},
-		Max: view.Point{X: infinite, Y: infinite},
+	SolidUV          = xmath.Rect{Max: xmath.Pos2{X: 1, Y: 1}}
+	SolidTextureSize = xmath.Vec2{X: 1, Y: 1}
+	Unclipped        = xmath.Rect{
+		Min: xmath.Pos2{X: -infinite, Y: -infinite},
+		Max: xmath.Pos2{X: infinite, Y: infinite},
 	}
 )
+
+type Rgba struct {
+	R, G, B, A float32
+}
 
 type Color32 uint32
 
@@ -27,7 +31,7 @@ func RGBA(r, g, b, a uint8) Color32 {
 	return Color32(uint32(r) | uint32(g)<<8 | uint32(b)<<16 | uint32(a)<<24)
 }
 
-func FromColor(c view.Color) Color32 {
+func FromColor(c Rgba) Color32 {
 	a := clamp01(c.A)
 	return RGBA(
 		uint8(clamp01(c.R)*a*255+0.5),
@@ -52,8 +56,8 @@ func clamp01(v float32) float32 {
 }
 
 type Vertex struct {
-	Pos   view.Point
-	UV    view.Point
+	Pos   xmath.Pos2
+	UV    xmath.Pos2
 	Color Color32
 }
 
@@ -64,6 +68,6 @@ type Mesh struct {
 }
 
 type ClippedPrimitive struct {
-	ClipRect view.Rect
+	ClipRect xmath.Rect
 	Mesh     Mesh
 }

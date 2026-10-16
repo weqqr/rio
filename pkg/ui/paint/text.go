@@ -1,28 +1,34 @@
 package paint
 
-import "github.com/weqqr/rio/pkg/ui/view"
+import "github.com/weqqr/rio/pkg/xmath"
+
+const DefaultTextSize float32 = 16
+
+type TextStyle struct {
+	Size float32
+}
 
 type Glyph struct {
-	UV   view.Rect
-	Pos  view.Point
-	Size view.Size
+	UV   xmath.Rect
+	Pos  xmath.Pos2
+	Size xmath.Vec2
 }
 
 type TextLayout struct {
-	Size   view.Size
+	Size   xmath.Vec2
 	Glyphs []Glyph
 }
 
 type TextRenderer interface {
-	Atlas() (TextureID, view.Size)
-	Layout(text string, style view.TextStyle) TextLayout
+	Atlas() (TextureID, xmath.Vec2)
+	Layout(text string, style TextStyle) TextLayout
 }
 
 type StubText struct {
 	AdvanceRatio     float32
 	LineHeightRatio  float32
 	GlyphTexture     TextureID
-	GlyphTextureSize view.Size
+	GlyphTextureSize xmath.Vec2
 }
 
 func NewStubText() StubText {
@@ -30,22 +36,23 @@ func NewStubText() StubText {
 		AdvanceRatio:     0.5,
 		LineHeightRatio:  1,
 		GlyphTexture:     1,
-		GlyphTextureSize: view.Size{Width: 1, Height: 1},
+		GlyphTextureSize: xmath.Vec2{X: 1, Y: 1},
 	}
 }
 
-func (s StubText) Atlas() (TextureID, view.Size) {
+func (s StubText) Atlas() (TextureID, xmath.Vec2) {
 	return s.GlyphTexture, s.GlyphTextureSize
 }
 
-func (s StubText) Layout(text string, style view.TextStyle) TextLayout {
+func (s StubText) Layout(text string, style TextStyle) TextLayout {
 	size := style.Size
 	if size <= 0 {
-		size = view.DefaultTextSize
+		size = DefaultTextSize
 	}
 	advance := size * s.AdvanceRatio
 	lineHeight := size * s.LineHeightRatio
-	uv := view.Rect{Max: view.Point{X: s.GlyphTextureSize.Width, Y: s.GlyphTextureSize.Height}}
+	glyphSize := xmath.Vec2{X: advance, Y: lineHeight}
+	uv := xmath.Rect{Max: xmath.Pos2{X: s.GlyphTextureSize.X, Y: s.GlyphTextureSize.Y}}
 
 	var (
 		glyphs          []Glyph
@@ -60,25 +67,13 @@ func (s StubText) Layout(text string, style view.TextStyle) TextLayout {
 		}
 		glyphs = append(glyphs, Glyph{
 			UV:   uv,
-			Pos:  view.Point{X: lineX, Y: y},
-			Size: view.Size{Width: advance, Height: lineHeight},
+			Pos:  xmath.Pos2{X: lineX, Y: y},
+			Size: glyphSize,
 		})
 		lineX += advance
 	}
 	return TextLayout{
-		Size:   view.Size{Width: max(width, lineX), Height: y + lineHeight},
+		Size:   xmath.Vec2{X: max(width, lineX), Y: y + lineHeight},
 		Glyphs: glyphs,
 	}
-}
-
-type measurer struct {
-	renderer TextRenderer
-}
-
-func Measurer(renderer TextRenderer) view.TextMeasurer {
-	return measurer{renderer: renderer}
-}
-
-func (m measurer) Measure(text string, style view.TextStyle, constraints view.Constraints) view.Size {
-	return m.renderer.Layout(text, style).Size
 }

@@ -1,10 +1,10 @@
 package view
 
-const DefaultTextSize float32 = 16
+import "github.com/weqqr/rio/pkg/ui/paint"
 
-type TextStyle struct {
-	Size float32
-}
+const DefaultTextSize = paint.DefaultTextSize
+
+type TextStyle = paint.TextStyle
 
 type FillRectOp struct {
 	Rect  Rect
@@ -36,6 +36,19 @@ func (r *Recorder) DrawText(text string, style TextStyle, at Point) {
 
 type TextMeasurer interface {
 	Measure(text string, style TextStyle, constraints Constraints) Size
+}
+
+func Measurer(renderer paint.TextRenderer) TextMeasurer {
+	return rendererMeasurer{renderer: renderer}
+}
+
+type rendererMeasurer struct {
+	renderer paint.TextRenderer
+}
+
+func (m rendererMeasurer) Measure(text string, style TextStyle, constraints Constraints) Size {
+	size := m.renderer.Layout(text, style).Size
+	return Size{Width: size.X, Height: size.Y}
 }
 
 type Monospace struct {

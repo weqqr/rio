@@ -1,21 +1,20 @@
 package view
 
-import "math"
+import (
+	"math"
 
-type Point struct {
-	X, Y float32
-}
+	"github.com/weqqr/rio/pkg/ui/paint"
+	"github.com/weqqr/rio/pkg/xmath"
+)
+
+type Point = xmath.Pos2
+
+type Rect = xmath.Rect
+
+type Color = paint.Rgba
 
 type Size struct {
 	Width, Height float32
-}
-
-type Rect struct {
-	Min, Max Point
-}
-
-type Color struct {
-	R, G, B, A float32
 }
 
 type Alignment int
