@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/weqqr/rio/pkg/gpu"
 	"github.com/weqqr/rio/pkg/renderer"
 	"github.com/weqqr/rio/pkg/wev"
 )
@@ -10,7 +11,12 @@ type App struct {
 }
 
 func (a *App) OnWindowCreated(e *wev.EventLoop, window *wev.Window) error {
-	renderer, err := render.New(window.RawWindowHandle())
+	width, height := window.Size()
+	renderer, err := render.New(gpu.SurfaceTarget{
+		Handle: window.RawWindowHandle(),
+		Width:  uint32(width),
+		Height: uint32(height),
+	})
 	if err != nil {
 		return err
 	}
