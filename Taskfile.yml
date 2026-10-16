@@ -1,0 +1,11 @@
+version: '3'
+
+tasks:
+  run:
+    desc: Run the application
+    cmds:
+      - go run .
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
