@@ -51,7 +51,7 @@ type DXGI_SWAP_CHAIN_DESC1 struct {
 	Width       uint32
 	Height      uint32
 	Format      DXGI_FORMAT
-	Stereo      uint32 // BOOL
+	Stereo      uint32
 	SampleDesc  DXGI_SAMPLE_DESC
 	BufferUsage DXGI_USAGE
 	BufferCount uint32

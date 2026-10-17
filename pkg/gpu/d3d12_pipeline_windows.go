@@ -104,7 +104,7 @@ func (d *d3d12Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (rend
 	}
 
 	pipelineDesc := d3d12.D3D12_GRAPHICS_PIPELINE_STATE_DESC{
-		RootSignature: rootSignature.Object.Ptr(),
+		RootSignature: rootSignature.Ptr(),
 		VS: d3d12.D3D12_SHADER_BYTECODE{
 			Bytecode:   unsafe.Pointer(&vertexCode[0]),
 			ByteLength: uintptr(len(vertexCode)),

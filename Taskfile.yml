@@ -1,5 +1,8 @@
 version: '3'
 
+vars:
+  CUSTOM_GCL: '{{if eq OS "windows"}}./bin/custom-gcl.exe{{else}}./bin/custom-gcl{{end}}'
+
 tasks:
   run:
     desc: Run the application
@@ -12,7 +15,8 @@ tasks:
   lint:
     desc: Lint the code
     cmds:
-      - golangci-lint run ./...
+      - golangci-lint custom
+      - '{{.CUSTOM_GCL}} run ./...'
   ci:
     desc: Run lint and tests in parallel
     deps: [lint, test]

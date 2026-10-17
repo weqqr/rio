@@ -1,0 +1,7 @@
+version: v2.14.0
+name: custom-gcl
+destination: ./bin
+plugins:
+  - module: github.com/weqqr/rio
+    import: github.com/weqqr/rio/cmd/lint/nocomments
+    path: .

@@ -42,7 +42,7 @@ type EventLoop struct {
 	handler  EventHandler
 	platform Platform
 	windows  map[uintptr]*Window
-	pending  []*Window // windows created before Run; OnWindowCreated is deferred until then
+	pending  []*Window
 	err      error
 }
 

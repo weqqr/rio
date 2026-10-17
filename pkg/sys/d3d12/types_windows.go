@@ -82,7 +82,7 @@ type D3D12_DESCRIPTOR_HEAP_DESC struct {
 
 type D3D12_RESOURCE_TRANSITION_BARRIER struct {
 	_           structs.HostLayout
-	Resource    unsafe.Pointer // ID3D12Resource*
+	Resource    unsafe.Pointer
 	Subresource uint32
 	StateBefore D3D12_RESOURCE_STATES
 	StateAfter  D3D12_RESOURCE_STATES
