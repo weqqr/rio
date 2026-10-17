@@ -267,4 +267,30 @@ type RenderPass struct {
 	b renderPassBackend
 }
 
+func (p *RenderPass) SetPipeline(pipeline *RenderPipeline) error {
+	if pipeline == nil {
+		return errors.New("gpu: cannot set a nil render pipeline")
+	}
+	return p.b.SetPipeline(pipeline)
+}
+
+func (p *RenderPass) SetVertexBuffer(slot uint32, buffer *Buffer) error {
+	if buffer == nil {
+		return errors.New("gpu: cannot set a nil vertex buffer")
+	}
+	return p.b.SetVertexBuffer(slot, buffer)
+}
+
+func (p *RenderPass) SetViewport(x, y, width, height, minDepth, maxDepth float32) error {
+	return p.b.SetViewport(x, y, width, height, minDepth, maxDepth)
+}
+
+func (p *RenderPass) SetScissorRect(x, y, width, height uint32) error {
+	return p.b.SetScissorRect(x, y, width, height)
+}
+
+func (p *RenderPass) Draw(vertexCount, instanceCount, firstVertex, firstInstance uint32) error {
+	return p.b.Draw(vertexCount, instanceCount, firstVertex, firstInstance)
+}
+
 func (p *RenderPass) End() { p.b.End() }

@@ -1,15 +1,21 @@
 package renderer
 
-import "github.com/weqqr/rio/pkg/gpu"
+import (
+	"unsafe"
 
-var clearColor = gpu.Color{R: 1, A: 1}
+	"github.com/weqqr/rio/pkg/gpu"
+)
+
+var clearColor = gpu.Color{R: 0.1, G: 0.1, B: 0.1, A: 1}
 
 type Renderer struct {
-	instance *gpu.Instance
-	surface  *gpu.Surface
-	device   *gpu.Device
-	queue    *gpu.Queue
-	config   gpu.SurfaceConfiguration
+	instance     *gpu.Instance
+	surface      *gpu.Surface
+	device       *gpu.Device
+	queue        *gpu.Queue
+	config       gpu.SurfaceConfiguration
+	pipeline     *gpu.RenderPipeline
+	vertexBuffer *gpu.Buffer
 }
 
 func New(target gpu.SurfaceTarget) (*Renderer, error) {
@@ -51,7 +57,74 @@ func New(target gpu.SurfaceTarget) (*Renderer, error) {
 		_ = r.Close()
 		return nil, err
 	}
+	if err := r.createTriangle(); err != nil {
+		_ = r.Close()
+		return nil, err
+	}
 	return r, nil
+}
+
+func (r *Renderer) createTriangle() error {
+	shader, err := r.device.CreateShaderModule(&gpu.ShaderModuleDescriptor{
+		Label: "triangle",
+		Code:  []byte(triangleShader),
+	})
+	if err != nil {
+		return err
+	}
+	defer shader.Destroy()
+
+	pipeline, err := r.device.CreateRenderPipeline(&gpu.RenderPipelineDescriptor{
+		Label: "triangle",
+		Vertex: gpu.VertexState{
+			Module:     shader,
+			EntryPoint: "vs_main",
+			Buffers: []gpu.VertexBufferLayout{{
+				ArrayStride: uint64(unsafe.Sizeof(Vertex{})),
+				StepMode:    gpu.VertexStepModeVertex,
+				Attributes: []gpu.VertexAttribute{
+					{Format: gpu.VertexFormatFloat32x2, Offset: 0, ShaderLocation: 0},
+					{Format: gpu.VertexFormatFloat32x4, Offset: 8, ShaderLocation: 1},
+				},
+			}},
+		},
+		Primitive: gpu.PrimitiveState{
+			Topology:  gpu.PrimitiveTopologyTriangleList,
+			FrontFace: gpu.FrontFaceCCW,
+			CullMode:  gpu.CullModeNone,
+		},
+		Fragment: &gpu.FragmentState{
+			Module:     shader,
+			EntryPoint: "ps_main",
+			Targets: []gpu.ColorTargetState{{
+				Format:    gpu.TextureFormatRGBA8Unorm,
+				WriteMask: gpu.ColorWriteMaskAll,
+			}},
+		},
+		Multisample: gpu.MultisampleState{Count: 1, Mask: 0xFFFFFFFF},
+	})
+	if err != nil {
+		return err
+	}
+	r.pipeline = pipeline
+
+	vertexSize := uint64(unsafe.Sizeof(triangleVertices[0]))
+	vertexBytes := uint64(len(triangleVertices)) * vertexSize
+	vertexBuffer, err := r.device.CreateBuffer(&gpu.BufferDescriptor{
+		Label: "triangle vertices",
+		Size:  vertexBytes,
+		Usage: gpu.BufferUsageVertex | gpu.BufferUsageCopyDst,
+	})
+	if err != nil {
+		return err
+	}
+	r.vertexBuffer = vertexBuffer
+
+	data := unsafe.Slice((*byte)(unsafe.Pointer(&triangleVertices[0])), int(vertexBytes))
+	if err := r.queue.WriteBuffer(r.vertexBuffer, 0, data); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *Renderer) Render() error {
@@ -75,6 +148,10 @@ func (r *Renderer) Render() error {
 	if err != nil {
 		return err
 	}
+	if err := r.draw(pass); err != nil {
+		pass.End()
+		return err
+	}
 	pass.End()
 
 	commands, err := encoder.Finish()
@@ -87,6 +164,24 @@ func (r *Renderer) Render() error {
 	return frame.Present()
 }
 
+func (r *Renderer) draw(pass *gpu.RenderPass) error {
+	width := float32(r.config.Width)
+	height := float32(r.config.Height)
+	if err := pass.SetViewport(0, 0, width, height, 0, 1); err != nil {
+		return err
+	}
+	if err := pass.SetScissorRect(0, 0, r.config.Width, r.config.Height); err != nil {
+		return err
+	}
+	if err := pass.SetPipeline(r.pipeline); err != nil {
+		return err
+	}
+	if err := pass.SetVertexBuffer(0, r.vertexBuffer); err != nil {
+		return err
+	}
+	return pass.Draw(uint32(len(triangleVertices)), 1, 0, 0)
+}
+
 func (r *Renderer) Resize(width, height uint32) error {
 	if width == 0 || height == 0 {
 		return nil
@@ -97,6 +192,14 @@ func (r *Renderer) Resize(width, height uint32) error {
 }
 
 func (r *Renderer) Close() error {
+	if r.vertexBuffer != nil {
+		r.vertexBuffer.Destroy()
+		r.vertexBuffer = nil
+	}
+	if r.pipeline != nil {
+		r.pipeline.Destroy()
+		r.pipeline = nil
+	}
 	if r.surface != nil {
 		r.surface.Close()
 		r.surface = nil

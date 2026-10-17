@@ -97,6 +97,8 @@ type d3d12Device struct {
 	allocator d3d12.ID3D12CommandAllocator
 	list      d3d12.ID3D12GraphicsCommandList
 
+	rootSignature d3d12.ID3D12RootSignature
+
 	fence      d3d12.ID3D12Fence
 	fenceEvent uintptr
 	fenceValue uint64
@@ -140,6 +142,10 @@ func (d *d3d12Device) Close() error {
 	if d.allocator.Valid() {
 		d.allocator.Release()
 		d.allocator = d3d12.ID3D12CommandAllocator{}
+	}
+	if d.rootSignature.Valid() {
+		d.rootSignature.Release()
+		d.rootSignature = d3d12.ID3D12RootSignature{}
 	}
 	if d.fence.Valid() {
 		d.fence.Release()
@@ -235,6 +241,9 @@ type d3d12CommandBuffer struct {
 type d3d12RenderPass struct {
 	device *d3d12Device
 	views  []*d3d12View
+
+	pipeline      *d3d12Pipeline
+	vertexBuffers map[uint32]*d3d12Buffer
 }
 
 func (p *d3d12RenderPass) End() {
