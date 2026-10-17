@@ -93,7 +93,12 @@ func (s *d3d12Surface) createRenderTargets(device *d3d12Device) error {
 			return hr.Err()
 		}
 		device.device.CreateRenderTargetView(s.backBuffers[i], nil, handle)
-		s.views[i] = &d3d12View{handle: handle, resource: s.backBuffers[i]}
+		s.views[i] = &d3d12View{
+			handle:        handle,
+			resource:      s.backBuffers[i],
+			format:        s.format,
+			mipLevelCount: 1,
+		}
 		handle.Ptr += uintptr(s.rtvStride)
 	}
 	return nil
@@ -138,7 +143,7 @@ type d3d12Frame struct {
 }
 
 func (f *d3d12Frame) Texture() textureBackend {
-	return &d3d12Texture{surface: f.surface, index: f.index}
+	return &d3d12SurfaceTexture{surface: f.surface, index: f.index}
 }
 
 func (f *d3d12Frame) Present() error {
@@ -152,16 +157,51 @@ func (f *d3d12Frame) Present() error {
 	return nil
 }
 
-type d3d12Texture struct {
+type d3d12SurfaceTexture struct {
 	surface *d3d12Surface
 	index   uint32
 }
 
-func (t *d3d12Texture) CreateView() viewBackend { return t.surface.views[t.index] }
+func (t *d3d12SurfaceTexture) CreateView(desc *TextureViewDescriptor) (viewBackend, error) {
+	if desc != nil {
+		if desc.Dimension == TextureViewDimension2DArray {
+			return nil, errors.New("gpu: array texture views are not implemented by the d3d12 backend")
+		}
+		if desc.Format != TextureFormatUndefined {
+			format, err := dxgiFormat(desc.Format)
+			if err != nil {
+				return nil, err
+			}
+			if format != t.surface.format {
+				return nil, errors.New("gpu: texture view format must match the surface format")
+			}
+		}
+		if desc.BaseMipLevel != 0 || desc.MipLevelCount > 1 {
+			return nil, errors.New("gpu: surface textures only have one mip level")
+		}
+	}
+	return t.surface.views[t.index], nil
+}
+
+func (t *d3d12SurfaceTexture) Destroy() {}
 
 type d3d12View struct {
-	handle   d3d12.D3D12_CPU_DESCRIPTOR_HANDLE
-	resource com.Object
+	handle        d3d12.D3D12_CPU_DESCRIPTOR_HANDLE
+	resource      com.Object
+	format        dxgi.DXGI_FORMAT
+	baseMipLevel  uint32
+	mipLevelCount uint32
+	texture       *d3d12Texture
+	rtvHeap       d3d12.ID3D12DescriptorHeap
+	ownsHeap      bool
+}
+
+func (v *d3d12View) Destroy() {
+	if v.ownsHeap && v.rtvHeap.Valid() {
+		v.rtvHeap.Release()
+		v.rtvHeap = d3d12.ID3D12DescriptorHeap{}
+		v.ownsHeap = false
+	}
 }
 
 func dxgiFormat(format TextureFormat) (dxgi.DXGI_FORMAT, error) {

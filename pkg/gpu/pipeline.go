@@ -113,6 +113,7 @@ type MultisampleState struct {
 
 type RenderPipelineDescriptor struct {
 	Label       string
+	Layout      *PipelineLayout
 	Vertex      VertexState
 	Primitive   PrimitiveState
 	Fragment    *FragmentState
@@ -135,3 +136,25 @@ func (d *Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (*RenderPi
 }
 
 func (p *RenderPipeline) Destroy() { p.b.Destroy() }
+
+type PipelineLayoutDescriptor struct {
+	Label            string
+	BindGroupLayouts []*BindGroupLayout
+}
+
+type PipelineLayout struct {
+	b pipelineLayoutBackend
+}
+
+func (d *Device) CreatePipelineLayout(desc *PipelineLayoutDescriptor) (*PipelineLayout, error) {
+	if desc == nil {
+		return nil, errors.New("gpu: pipeline layout descriptor is nil")
+	}
+	impl, err := d.b.CreatePipelineLayout(desc)
+	if err != nil {
+		return nil, err
+	}
+	return &PipelineLayout{b: impl}, nil
+}
+
+func (l *PipelineLayout) Destroy() { l.b.Destroy() }

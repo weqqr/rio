@@ -193,6 +193,7 @@ type d3d12Encoder struct {
 func (e *d3d12Encoder) BeginRenderPass(desc *RenderPassDescriptor) (renderPassBackend, error) {
 	views := make([]*d3d12View, len(desc.ColorAttachments))
 	handles := make([]d3d12.D3D12_CPU_DESCRIPTOR_HANDLE, len(desc.ColorAttachments))
+	afterStates := make([]d3d12.D3D12_RESOURCE_STATES, len(desc.ColorAttachments))
 	for i := range desc.ColorAttachments {
 		attachment := &desc.ColorAttachments[i]
 		if attachment.StoreOp != StoreOpStore {
@@ -204,12 +205,20 @@ func (e *d3d12Encoder) BeginRenderPass(desc *RenderPassDescriptor) (renderPassBa
 		}
 		views[i] = view
 		handles[i] = view.handle
+		before := d3d12.D3D12_RESOURCE_STATE_PRESENT
+		after := d3d12.D3D12_RESOURCE_STATE_PRESENT
+		if view.texture != nil {
+			before = view.texture.state
+			after = textureStateAfterUse(view.texture.usage)
+			view.texture.state = d3d12.D3D12_RESOURCE_STATE_RENDER_TARGET
+		}
+		afterStates[i] = after
 		e.device.list.ResourceBarrier(1, &d3d12.D3D12_RESOURCE_BARRIER{
 			Type: d3d12.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
 			Transition: d3d12.D3D12_RESOURCE_TRANSITION_BARRIER{
 				Resource:    view.resource.Ptr(),
 				Subresource: d3d12.D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-				StateBefore: d3d12.D3D12_RESOURCE_STATE_PRESENT,
+				StateBefore: before,
 				StateAfter:  d3d12.D3D12_RESOURCE_STATE_RENDER_TARGET,
 			},
 		})
@@ -224,7 +233,7 @@ func (e *d3d12Encoder) BeginRenderPass(desc *RenderPassDescriptor) (renderPassBa
 		color := desc.ColorAttachments[i].ClearValue.rgba()
 		e.device.list.ClearRenderTargetView(handles[i], &color, 0, 0)
 	}
-	return &d3d12RenderPass{device: e.device, views: views}, nil
+	return &d3d12RenderPass{device: e.device, views: views, afterStates: afterStates}, nil
 }
 
 func (e *d3d12Encoder) Finish() (commandBufferBackend, error) {
@@ -239,22 +248,28 @@ type d3d12CommandBuffer struct {
 }
 
 type d3d12RenderPass struct {
-	device *d3d12Device
-	views  []*d3d12View
+	device      *d3d12Device
+	views       []*d3d12View
+	afterStates []d3d12.D3D12_RESOURCE_STATES
 
 	pipeline      *d3d12Pipeline
 	vertexBuffers map[uint32]*d3d12Buffer
+	bindGroups    map[uint32]*d3d12BindGroup
 }
 
 func (p *d3d12RenderPass) End() {
-	for _, view := range p.views {
+	for i, view := range p.views {
+		after := p.afterStates[i]
+		if view.texture != nil {
+			view.texture.state = after
+		}
 		p.device.list.ResourceBarrier(1, &d3d12.D3D12_RESOURCE_BARRIER{
 			Type: d3d12.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
 			Transition: d3d12.D3D12_RESOURCE_TRANSITION_BARRIER{
 				Resource:    view.resource.Ptr(),
 				Subresource: d3d12.D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
 				StateBefore: d3d12.D3D12_RESOURCE_STATE_RENDER_TARGET,
-				StateAfter:  d3d12.D3D12_RESOURCE_STATE_PRESENT,
+				StateAfter:  after,
 			},
 		})
 	}

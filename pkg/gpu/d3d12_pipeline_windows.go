@@ -33,8 +33,10 @@ func (m *d3d12ShaderModule) Code() []byte { return m.code }
 func (m *d3d12ShaderModule) Destroy() {}
 
 type d3d12Pipeline struct {
-	state   d3d12.ID3D12PipelineState
-	strides []uint64
+	state         d3d12.ID3D12PipelineState
+	strides       []uint64
+	layout        *d3d12PipelineLayout
+	rootSignature d3d12.ID3D12RootSignature
 }
 
 func (d *d3d12Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (renderPipelineBackend, error) {
@@ -71,9 +73,21 @@ func (d *d3d12Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (rend
 		}
 	}
 
-	rootSignature, err := d.ensureRootSignature()
-	if err != nil {
-		return nil, err
+	var rootSignature d3d12.ID3D12RootSignature
+	var pipelineLayout *d3d12PipelineLayout
+	if desc.Layout != nil {
+		var ok bool
+		pipelineLayout, ok = desc.Layout.b.(*d3d12PipelineLayout)
+		if !ok {
+			return nil, errors.New("gpu: pipeline layout is not a d3d12 pipeline layout")
+		}
+		rootSignature = pipelineLayout.signature
+	} else {
+		var err error
+		rootSignature, err = d.ensureRootSignature()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	inputElements, semantic, strides, err := buildInputLayout(desc.Vertex.Buffers)
@@ -165,7 +179,7 @@ func (d *d3d12Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (rend
 		}
 	}
 
-	pipeline := &d3d12Pipeline{strides: strides}
+	pipeline := &d3d12Pipeline{strides: strides, layout: pipelineLayout, rootSignature: rootSignature}
 	if hr := d.device.CreateGraphicsPipelineState(&pipelineDesc, &pipeline.state); hr.Failed() {
 		return nil, fmt.Errorf("gpu: create graphics pipeline state: %w", hr.Err())
 	}
@@ -204,32 +218,9 @@ func (d *d3d12Device) ensureRootSignature() (d3d12.ID3D12RootSignature, error) {
 	if d.rootSignature.Valid() {
 		return d.rootSignature, nil
 	}
-
-	desc := d3d12.D3D12_ROOT_SIGNATURE_DESC{
-		Flags: d3d12.D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
-	}
-	var blob, errorBlob com.Object
-	hr := d3d12.D3D12SerializeRootSignature(&desc, d3d12.D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errorBlob)
-	if errorBlob.Valid() {
-		message := blobString(errorBlob)
-		errorBlob.Release()
-		if hr.Failed() {
-			return d3d12.ID3D12RootSignature{}, fmt.Errorf("gpu: serialize root signature: %s (%s)", message, hr)
-		}
-	}
-	if hr.Failed() {
-		return d3d12.ID3D12RootSignature{}, hr.Err()
-	}
-	if !blob.Valid() {
-		return d3d12.ID3D12RootSignature{}, errors.New("gpu: root signature serializer returned no blob")
-	}
-
-	serialized := d3d12.ID3DBlob{Object: blob}
-	defer serialized.Release()
-
-	var signature d3d12.ID3D12RootSignature
-	if hr := d.device.CreateRootSignature(0, serialized.GetBufferPointer(), serialized.GetBufferSize(), &signature); hr.Failed() {
-		return d3d12.ID3D12RootSignature{}, fmt.Errorf("gpu: create root signature: %w", hr.Err())
+	signature, err := d.createRootSignature(nil, nil)
+	if err != nil {
+		return d3d12.ID3D12RootSignature{}, err
 	}
 	d.rootSignature = signature
 	return signature, nil
@@ -372,7 +363,7 @@ func (p *d3d12RenderPass) SetPipeline(pipeline *RenderPipeline) error {
 	}
 	p.pipeline = impl
 	p.device.list.SetPipelineState(impl.state.Object)
-	p.device.list.SetGraphicsRootSignature(p.device.rootSignature.Object)
+	p.device.list.SetGraphicsRootSignature(impl.rootSignature.Object)
 	return nil
 }
 
@@ -391,6 +382,21 @@ func (p *d3d12RenderPass) SetVertexBuffer(slot uint32, buffer *Buffer) error {
 		p.vertexBuffers = make(map[uint32]*d3d12Buffer)
 	}
 	p.vertexBuffers[slot] = impl
+	return nil
+}
+
+func (p *d3d12RenderPass) SetBindGroup(index uint32, group *BindGroup) error {
+	impl, ok := group.b.(*d3d12BindGroup)
+	if !ok {
+		return errors.New("gpu: bind group is not a d3d12 bind group")
+	}
+	if index >= maxBindGroups {
+		return fmt.Errorf("gpu: bind group index %d is out of range", index)
+	}
+	if p.bindGroups == nil {
+		p.bindGroups = make(map[uint32]*d3d12BindGroup)
+	}
+	p.bindGroups[index] = impl
 	return nil
 }
 
@@ -434,6 +440,9 @@ func (p *d3d12RenderPass) Draw(vertexCount, instanceCount, firstVertex, firstIns
 	if vertexCount == 0 || instanceCount == 0 {
 		return nil
 	}
+	if err := p.bindResourceGroups(); err != nil {
+		return err
+	}
 
 	slots := make([]int, 0, len(p.vertexBuffers))
 	for slot := range p.vertexBuffers {
@@ -455,5 +464,69 @@ func (p *d3d12RenderPass) Draw(vertexCount, instanceCount, firstVertex, firstIns
 	}
 	p.device.list.IASetPrimitiveTopology(d3d12.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST)
 	p.device.list.DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance)
+	return nil
+}
+
+func (p *d3d12RenderPass) bindResourceGroups() error {
+	if p.pipeline.layout == nil {
+		return nil
+	}
+	type groupBinding struct {
+		group    *d3d12BindGroup
+		bindings []d3d12RootBinding
+	}
+	var groups []groupBinding
+	var srvHeap, samplerHeap d3d12.ID3D12DescriptorHeap
+	for i, layout := range p.pipeline.layout.groups {
+		group, exists := p.bindGroups[uint32(i)]
+		if !exists {
+			if len(layout.entries) == 0 {
+				continue
+			}
+			return fmt.Errorf("gpu: render pass is missing bind group %d", i)
+		}
+		if group.layout != layout {
+			return fmt.Errorf("gpu: bind group %d uses a different layout than the pipeline", i)
+		}
+		if layout.hasTexture {
+			if srvHeap.Valid() && srvHeap.Ptr() != group.srvHeap.heap.Ptr() {
+				return errors.New("gpu: multiple bind groups with texture bindings are not supported by the d3d12 backend")
+			}
+			srvHeap = group.srvHeap.heap
+		}
+		if layout.hasSampler {
+			if samplerHeap.Valid() && samplerHeap.Ptr() != group.samplerHeap.heap.Ptr() {
+				return errors.New("gpu: multiple bind groups with sampler bindings are not supported by the d3d12 backend")
+			}
+			samplerHeap = group.samplerHeap.heap
+		}
+		groups = append(groups, groupBinding{group: group, bindings: p.pipeline.layout.bindings[i]})
+	}
+
+	heaps := make([]unsafe.Pointer, 0, 2)
+	if srvHeap.Valid() {
+		heaps = append(heaps, srvHeap.Ptr())
+	}
+	if samplerHeap.Valid() {
+		heaps = append(heaps, samplerHeap.Ptr())
+	}
+	if len(heaps) > 0 {
+		p.device.list.SetDescriptorHeaps(uint32(len(heaps)), &heaps[0])
+	}
+	for _, bindingGroup := range groups {
+		for _, binding := range bindingGroup.bindings {
+			var handle d3d12.D3D12_GPU_DESCRIPTOR_HANDLE
+			if binding.entry.Type == BindingTypeSampler {
+				handle = bindingGroup.group.samplerHeap.gpuStart
+				register := bindingGroup.group.layout.samplerRegister[binding.entry.Binding]
+				handle.Ptr += uint64(register) * uint64(bindingGroup.group.samplerHeap.stride)
+			} else {
+				handle = bindingGroup.group.srvHeap.gpuStart
+				register := bindingGroup.group.layout.textureRegister[binding.entry.Binding]
+				handle.Ptr += uint64(register) * uint64(bindingGroup.group.srvHeap.stride)
+			}
+			p.device.list.SetGraphicsRootDescriptorTable(binding.param, handle)
+		}
+	}
 	return nil
 }

@@ -13,6 +13,8 @@ const (
 	slotDeviceCreateDescriptorHeap             = 14
 	slotDeviceGetDescriptorHandleIncrementSize = 15
 	slotDeviceCreateRenderTargetView           = 20
+	slotDeviceCreateShaderResourceView         = 18
+	slotDeviceCreateSampler                    = 22
 	slotDeviceCreateFence                      = 36
 )
 
@@ -56,6 +58,15 @@ func (d ID3D12Device) CreateRenderTargetView(resource com.Object, desc unsafe.Po
 		uintptr(resource.Ptr()), uintptr(desc), dest.Ptr)
 }
 
+func (d ID3D12Device) CreateShaderResourceView(resource com.Object, desc *D3D12_SHADER_RESOURCE_VIEW_DESC, dest D3D12_CPU_DESCRIPTOR_HANDLE) {
+	d.Call(slotDeviceCreateShaderResourceView,
+		uintptr(resource.Ptr()), uintptr(unsafe.Pointer(desc)), dest.Ptr)
+}
+
+func (d ID3D12Device) CreateSampler(desc *D3D12_SAMPLER_DESC, dest D3D12_CPU_DESCRIPTOR_HANDLE) {
+	d.Call(slotDeviceCreateSampler, uintptr(unsafe.Pointer(desc)), dest.Ptr)
+}
+
 func (d ID3D12Device) CreateFence(initialValue uint64, flags D3D12_FENCE_FLAGS, fence *ID3D12Fence) com.HRESULT {
 	return com.HRESULT(d.Call(slotDeviceCreateFence,
 		uintptr(initialValue), uintptr(flags),
@@ -87,11 +98,14 @@ func (a ID3D12CommandAllocator) Reset() com.HRESULT {
 }
 
 const (
-	slotListReset                 = 10
-	slotListClose                 = 9
-	slotListResourceBarrier       = 26
-	slotListOMSetRenderTargets    = 46
-	slotListClearRenderTargetView = 48
+	slotListReset                          = 10
+	slotListClose                          = 9
+	slotListResourceBarrier                = 26
+	slotListOMSetRenderTargets             = 46
+	slotListClearRenderTargetView          = 48
+	slotListCopyTextureRegion              = 16
+	slotListSetDescriptorHeaps             = 28
+	slotListSetGraphicsRootDescriptorTable = 32
 )
 
 type ID3D12GraphicsCommandList struct{ com.Object }
@@ -119,6 +133,20 @@ func (l ID3D12GraphicsCommandList) ClearRenderTargetView(rtv D3D12_CPU_DESCRIPTO
 		rtv.Ptr, uintptr(unsafe.Pointer(color)), uintptr(numRects), rects)
 }
 
+func (l ID3D12GraphicsCommandList) CopyTextureRegion(dst *D3D12_TEXTURE_COPY_LOCATION, dstX, dstY, dstZ uint32, src *D3D12_TEXTURE_COPY_LOCATION, srcBox *D3D12_BOX) {
+	l.Call(slotListCopyTextureRegion,
+		uintptr(unsafe.Pointer(dst)), uintptr(dstX), uintptr(dstY), uintptr(dstZ),
+		uintptr(unsafe.Pointer(src)), uintptr(unsafe.Pointer(srcBox)))
+}
+
+func (l ID3D12GraphicsCommandList) SetDescriptorHeaps(count uint32, heaps *unsafe.Pointer) {
+	l.Call(slotListSetDescriptorHeaps, uintptr(count), uintptr(unsafe.Pointer(heaps)))
+}
+
+func (l ID3D12GraphicsCommandList) SetGraphicsRootDescriptorTable(index uint32, handle D3D12_GPU_DESCRIPTOR_HANDLE) {
+	l.Call(slotListSetGraphicsRootDescriptorTable, uintptr(index), uintptr(handle.Ptr))
+}
+
 const (
 	slotFenceGetCompletedValue    = 8
 	slotFenceSetEventOnCompletion = 9
@@ -136,10 +164,19 @@ func (f ID3D12Fence) SetEventOnCompletion(value uint64, event uintptr) com.HRESU
 
 type ID3D12DescriptorHeap struct{ com.Object }
 
-const slotHeapGetCPUDescriptorHandleForHeapStart = 9
+const (
+	slotHeapGetCPUDescriptorHandleForHeapStart = 9
+	slotHeapGetGPUDescriptorHandleForHeapStart = 10
+)
 
 func (h ID3D12DescriptorHeap) GetCPUDescriptorHandleForHeapStart() D3D12_CPU_DESCRIPTOR_HANDLE {
 	var handle D3D12_CPU_DESCRIPTOR_HANDLE
 	h.Call(slotHeapGetCPUDescriptorHandleForHeapStart, uintptr(unsafe.Pointer(&handle)))
+	return handle
+}
+
+func (h ID3D12DescriptorHeap) GetGPUDescriptorHandleForHeapStart() D3D12_GPU_DESCRIPTOR_HANDLE {
+	var handle D3D12_GPU_DESCRIPTOR_HANDLE
+	h.Call(slotHeapGetGPUDescriptorHandleForHeapStart, uintptr(unsafe.Pointer(&handle)))
 	return handle
 }

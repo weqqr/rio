@@ -15,7 +15,12 @@ type deviceBackend interface {
 	Queue() queueBackend
 	CreateCommandEncoder() (encoderBackend, error)
 	CreateBuffer(desc *BufferDescriptor) (bufferBackend, error)
+	CreateTexture(desc *TextureDescriptor) (textureBackend, error)
+	CreateSampler(desc *SamplerDescriptor) (samplerBackend, error)
 	CreateShaderModule(desc *ShaderModuleDescriptor) (shaderModuleBackend, error)
+	CreateBindGroupLayout(desc *BindGroupLayoutDescriptor) (bindGroupLayoutBackend, error)
+	CreateBindGroup(desc *BindGroupDescriptor) (bindGroupBackend, error)
+	CreatePipelineLayout(desc *PipelineLayoutDescriptor) (pipelineLayoutBackend, error)
 	CreateRenderPipeline(desc *RenderPipelineDescriptor) (renderPipelineBackend, error)
 	Close() error
 }
@@ -23,6 +28,7 @@ type deviceBackend interface {
 type queueBackend interface {
 	Submit(cmds []*CommandBuffer) error
 	WriteBuffer(buffer *Buffer, offset uint64, data []byte) error
+	WriteTexture(dst *ImageCopyTexture, data []byte, layout *ImageDataLayout, size Extent3D) error
 }
 
 type surfaceBackend interface {
@@ -37,10 +43,29 @@ type frameBackend interface {
 }
 
 type textureBackend interface {
-	CreateView() viewBackend
+	CreateView(desc *TextureViewDescriptor) (viewBackend, error)
+	Destroy()
 }
 
-type viewBackend interface{}
+type viewBackend interface {
+	Destroy()
+}
+
+type samplerBackend interface {
+	Destroy()
+}
+
+type bindGroupLayoutBackend interface {
+	Destroy()
+}
+
+type bindGroupBackend interface {
+	Destroy()
+}
+
+type pipelineLayoutBackend interface {
+	Destroy()
+}
 
 type encoderBackend interface {
 	BeginRenderPass(desc *RenderPassDescriptor) (renderPassBackend, error)
@@ -51,6 +76,7 @@ type encoderBackend interface {
 type renderPassBackend interface {
 	SetPipeline(pipeline *RenderPipeline) error
 	SetVertexBuffer(slot uint32, buffer *Buffer) error
+	SetBindGroup(index uint32, group *BindGroup) error
 	SetViewport(x, y, width, height, minDepth, maxDepth float32) error
 	SetScissorRect(x, y, width, height uint32) error
 	Draw(vertexCount, instanceCount, firstVertex, firstInstance uint32) error

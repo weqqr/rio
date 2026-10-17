@@ -148,7 +148,8 @@ func (q *Queue) Submit(cmds ...*CommandBuffer) error { return q.b.Submit(cmds) }
 type TextureFormat int
 
 const (
-	TextureFormatRGBA8Unorm TextureFormat = iota
+	TextureFormatUndefined TextureFormat = iota
+	TextureFormatRGBA8Unorm
 	TextureFormatBGRA8Unorm
 )
 
@@ -192,15 +193,11 @@ func (f *Frame) Texture() *Texture { return &Texture{b: f.b.Texture()} }
 
 func (f *Frame) Present() error { return f.b.Present() }
 
-type Texture struct {
-	b textureBackend
-}
-
-func (t *Texture) CreateView() *TextureView { return &TextureView{b: t.b.CreateView()} }
-
 type TextureView struct {
 	b viewBackend
 }
+
+func (v *TextureView) Destroy() { v.b.Destroy() }
 
 type Color struct {
 	R, G, B, A float64
@@ -279,6 +276,13 @@ func (p *RenderPass) SetVertexBuffer(slot uint32, buffer *Buffer) error {
 		return errors.New("gpu: cannot set a nil vertex buffer")
 	}
 	return p.b.SetVertexBuffer(slot, buffer)
+}
+
+func (p *RenderPass) SetBindGroup(index uint32, group *BindGroup) error {
+	if group == nil {
+		return errors.New("gpu: cannot set a nil bind group")
+	}
+	return p.b.SetBindGroup(index, group)
 }
 
 func (p *RenderPass) SetViewport(x, y, width, height, minDepth, maxDepth float32) error {
