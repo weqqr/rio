@@ -7,12 +7,12 @@ import (
 )
 
 type App struct {
-	renderer *render.Renderer
+	renderer *renderer.Renderer
 }
 
 func (a *App) OnWindowCreated(e *wev.EventLoop, window *wev.Window) error {
 	width, height := window.Size()
-	renderer, err := render.New(gpu.SurfaceTarget{
+	renderer, err := renderer.New(gpu.SurfaceTarget{
 		Handle: window.RawWindowHandle(),
 		Width:  uint32(width),
 		Height: uint32(height),
