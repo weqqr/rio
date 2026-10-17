@@ -32,7 +32,7 @@ type BufferDescriptor struct {
 }
 
 type Buffer struct {
-	b bufferBackend
+	b BufferBackend
 }
 
 func (d *Device) CreateBuffer(desc *BufferDescriptor) (*Buffer, error) {
@@ -66,12 +66,12 @@ func (q *Queue) WriteBuffer(buffer *Buffer, offset uint64, data []byte) error {
 	if buffer == nil {
 		return errors.New("gpu: write buffer target is nil")
 	}
-	return q.b.WriteBuffer(buffer, offset, data)
+	return q.b.WriteBuffer(buffer.b, offset, data)
 }
 
 func (e *CommandEncoder) CopyBufferToBuffer(src *Buffer, srcOffset uint64, dst *Buffer, dstOffset uint64, size uint64) error {
 	if src == nil || dst == nil {
 		return errors.New("gpu: copy buffer to buffer needs both a source and a destination")
 	}
-	return e.b.CopyBufferToBuffer(src, srcOffset, dst, dstOffset, size)
+	return e.b.CopyBufferToBuffer(src.b, srcOffset, dst.b, dstOffset, size)
 }

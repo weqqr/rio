@@ -1,20 +1,21 @@
-package gpu
+package d3d12backend
 
 import (
 	"errors"
 	"fmt"
 
 	"github.com/weqqr/rio/pkg/com"
+	"github.com/weqqr/rio/pkg/gpu"
 	"github.com/weqqr/rio/pkg/sys/d3d12"
 	"github.com/weqqr/rio/pkg/sys/dxgi"
 )
 
 type d3d12Surface struct {
 	factory dxgi.IDXGIFactory2
-	target  SurfaceTarget
+	target  gpu.SurfaceTarget
 
 	swapChain dxgi.IDXGISwapChain3
-	config    SurfaceConfiguration
+	config    gpu.SurfaceConfiguration
 	format    dxgi.DXGI_FORMAT
 
 	rtvHeap     d3d12.ID3D12DescriptorHeap
@@ -23,7 +24,7 @@ type d3d12Surface struct {
 	views       [frameCount]*d3d12View
 }
 
-func (s *d3d12Surface) Configure(device deviceBackend, config SurfaceConfiguration) error {
+func (s *d3d12Surface) Configure(device gpu.DeviceBackend, config gpu.SurfaceConfiguration) error {
 	d3d12Device, ok := device.(*d3d12Device)
 	if !ok {
 		return errors.New("gpu: d3d12 surface cannot be configured with a device from another backend")
@@ -114,7 +115,7 @@ func (s *d3d12Surface) releaseBackBuffers() {
 	}
 }
 
-func (s *d3d12Surface) AcquireFrame() (frameBackend, error) {
+func (s *d3d12Surface) AcquireFrame() (gpu.FrameBackend, error) {
 	if !s.swapChain.Valid() {
 		return nil, errors.New("gpu: surface is not configured")
 	}
@@ -142,13 +143,13 @@ type d3d12Frame struct {
 	index   uint32
 }
 
-func (f *d3d12Frame) Texture() textureBackend {
+func (f *d3d12Frame) Texture() gpu.TextureBackend {
 	return &d3d12SurfaceTexture{surface: f.surface, index: f.index}
 }
 
 func (f *d3d12Frame) Present() error {
 	interval := uint32(1)
-	if f.surface.config.PresentMode == PresentModeImmediate {
+	if f.surface.config.PresentMode == gpu.PresentModeImmediate {
 		interval = 0
 	}
 	if hr := f.surface.swapChain.Present(interval, 0); hr.Failed() {
@@ -162,12 +163,12 @@ type d3d12SurfaceTexture struct {
 	index   uint32
 }
 
-func (t *d3d12SurfaceTexture) CreateView(desc *TextureViewDescriptor) (viewBackend, error) {
+func (t *d3d12SurfaceTexture) CreateView(desc *gpu.TextureViewDescriptor) (gpu.ViewBackend, error) {
 	if desc != nil {
-		if desc.Dimension == TextureViewDimension2DArray {
+		if desc.Dimension == gpu.TextureViewDimension2DArray {
 			return nil, errors.New("gpu: array texture views are not implemented by the d3d12 backend")
 		}
-		if desc.Format != TextureFormatUndefined {
+		if desc.Format != gpu.TextureFormatUndefined {
 			format, err := dxgiFormat(desc.Format)
 			if err != nil {
 				return nil, err
@@ -204,16 +205,16 @@ func (v *d3d12View) Destroy() {
 	}
 }
 
-func dxgiFormat(format TextureFormat) (dxgi.DXGI_FORMAT, error) {
+func dxgiFormat(format gpu.TextureFormat) (dxgi.DXGI_FORMAT, error) {
 	switch format {
-	case TextureFormatRGBA8Unorm:
+	case gpu.TextureFormatRGBA8Unorm:
 		return dxgi.DXGI_FORMAT_R8G8B8A8_UNORM, nil
-	case TextureFormatBGRA8Unorm:
+	case gpu.TextureFormatBGRA8Unorm:
 		return dxgi.DXGI_FORMAT_B8G8R8A8_UNORM, nil
 	}
 	return dxgi.DXGI_FORMAT_UNKNOWN, fmt.Errorf("gpu: texture format %d is not supported by the d3d12 backend", int(format))
 }
 
-func (c Color) rgba() [4]float32 {
+func rgba(c gpu.Color) [4]float32 {
 	return [4]float32{float32(c.R), float32(c.G), float32(c.B), float32(c.A)}
 }

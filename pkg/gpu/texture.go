@@ -38,7 +38,7 @@ type TextureDescriptor struct {
 }
 
 type Texture struct {
-	b textureBackend
+	b TextureBackend
 }
 
 func (d *Device) CreateTexture(desc *TextureDescriptor) (*Texture, error) {
@@ -97,6 +97,8 @@ func (t *Texture) CreateView(desc *TextureViewDescriptor) (*TextureView, error) 
 }
 
 func (t *Texture) Destroy() { t.b.Destroy() }
+
+func (t *Texture) Backend() TextureBackend { return t.b }
 
 type Origin3D struct {
 	X uint32

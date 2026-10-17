@@ -38,7 +38,7 @@ type SamplerDescriptor struct {
 }
 
 type Sampler struct {
-	b samplerBackend
+	b SamplerBackend
 }
 
 func (d *Device) CreateSampler(desc *SamplerDescriptor) (*Sampler, error) {
@@ -53,3 +53,5 @@ func (d *Device) CreateSampler(desc *SamplerDescriptor) (*Sampler, error) {
 }
 
 func (s *Sampler) Destroy() { s.b.Destroy() }
+
+func (s *Sampler) Backend() SamplerBackend { return s.b }

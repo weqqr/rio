@@ -1,4 +1,4 @@
-package gpu
+package d3d12backend
 
 import (
 	"errors"
@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/weqqr/rio/pkg/com"
+	"github.com/weqqr/rio/pkg/gpu"
 	"github.com/weqqr/rio/pkg/sys/d3d12"
 	"github.com/weqqr/rio/pkg/sys/d3dcompiler"
 	"github.com/weqqr/rio/pkg/sys/dxgi"
@@ -21,7 +22,7 @@ type d3d12ShaderModule struct {
 	code []byte
 }
 
-func (d *d3d12Device) CreateShaderModule(desc *ShaderModuleDescriptor) (shaderModuleBackend, error) {
+func (d *d3d12Device) CreateShaderModule(desc *gpu.ShaderModuleDescriptor) (gpu.ShaderModuleBackend, error) {
 	if len(desc.Code) == 0 {
 		return nil, errors.New("gpu: shader module source is empty")
 	}
@@ -39,11 +40,11 @@ type d3d12Pipeline struct {
 	rootSignature d3d12.ID3D12RootSignature
 }
 
-func (d *d3d12Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (renderPipelineBackend, error) {
+func (d *d3d12Device) CreateRenderPipeline(desc *gpu.RenderPipelineDescriptor) (gpu.RenderPipelineBackend, error) {
 	if desc.Vertex.Module == nil {
 		return nil, errors.New("gpu: vertex shader module is missing")
 	}
-	vertexModule, ok := desc.Vertex.Module.b.(*d3d12ShaderModule)
+	vertexModule, ok := desc.Vertex.Module.Backend().(*d3d12ShaderModule)
 	if !ok {
 		return nil, errors.New("gpu: vertex shader module is not a d3d12 shader module")
 	}
@@ -57,7 +58,7 @@ func (d *d3d12Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (rend
 		if desc.Fragment.Module == nil {
 			return nil, errors.New("gpu: fragment shader module is missing")
 		}
-		pixelModule, ok := desc.Fragment.Module.b.(*d3d12ShaderModule)
+		pixelModule, ok := desc.Fragment.Module.Backend().(*d3d12ShaderModule)
 		if !ok {
 			return nil, errors.New("gpu: fragment shader module is not a d3d12 shader module")
 		}
@@ -77,7 +78,7 @@ func (d *d3d12Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (rend
 	var pipelineLayout *d3d12PipelineLayout
 	if desc.Layout != nil {
 		var ok bool
-		pipelineLayout, ok = desc.Layout.b.(*d3d12PipelineLayout)
+		pipelineLayout, ok = desc.Layout.Backend().(*d3d12PipelineLayout)
 		if !ok {
 			return nil, errors.New("gpu: pipeline layout is not a d3d12 pipeline layout")
 		}
@@ -100,7 +101,7 @@ func (d *d3d12Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (rend
 		return nil, err
 	}
 	switch desc.Primitive.Topology {
-	case PrimitiveTopologyTriangleList:
+	case gpu.PrimitiveTopologyTriangleList:
 	default:
 		return nil, fmt.Errorf("gpu: primitive topology %d is not supported by the d3d12 backend", int(desc.Primitive.Topology))
 	}
@@ -128,7 +129,7 @@ func (d *d3d12Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (rend
 		RasterizerState: d3d12.D3D12_RASTERIZER_DESC{
 			FillMode:              d3d12.D3D12_FILL_MODE_SOLID,
 			CullMode:              cullMode,
-			FrontCounterClockwise: boolToUint32(desc.Primitive.FrontFace == FrontFaceCCW),
+			FrontCounterClockwise: boolToUint32(desc.Primitive.FrontFace == gpu.FrontFaceCCW),
 			DepthClipEnable:       1,
 		},
 		DepthStencilState: d3d12.D3D12_DEPTH_STENCIL_DESC{
@@ -285,7 +286,7 @@ func blobString(blob com.Object) string {
 	return string(unsafe.Slice((*byte)(b.GetBufferPointer()), size))
 }
 
-func buildInputLayout(buffers []VertexBufferLayout) ([]d3d12.D3D12_INPUT_ELEMENT_DESC, []byte, []uint64, error) {
+func buildInputLayout(buffers []gpu.VertexBufferLayout) ([]d3d12.D3D12_INPUT_ELEMENT_DESC, []byte, []uint64, error) {
 	var elements []d3d12.D3D12_INPUT_ELEMENT_DESC
 	semantic := []byte("TEXCOORD\x00")
 	strides := make([]uint64, len(buffers))
@@ -298,7 +299,7 @@ func buildInputLayout(buffers []VertexBufferLayout) ([]d3d12.D3D12_INPUT_ELEMENT
 		}
 		strides[slot] = buffer.ArrayStride
 		classification := d3d12.D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA
-		if buffer.StepMode == VertexStepModeInstance {
+		if buffer.StepMode == gpu.VertexStepModeInstance {
 			classification = d3d12.D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA
 		}
 		for _, attribute := range buffer.Attributes {
@@ -316,34 +317,34 @@ func buildInputLayout(buffers []VertexBufferLayout) ([]d3d12.D3D12_INPUT_ELEMENT
 				InputSlot:            uint32(slot),
 				AlignedByteOffset:    uint32(attribute.Offset),
 				InputSlotClass:       classification,
-				InstanceDataStepRate: boolToUint32(buffer.StepMode == VertexStepModeInstance),
+				InstanceDataStepRate: boolToUint32(buffer.StepMode == gpu.VertexStepModeInstance),
 			})
 		}
 	}
 	return elements, semantic, strides, nil
 }
 
-func vertexFormat(format VertexFormat) (dxgi.DXGI_FORMAT, error) {
+func vertexFormat(format gpu.VertexFormat) (dxgi.DXGI_FORMAT, error) {
 	switch format {
-	case VertexFormatFloat32:
+	case gpu.VertexFormatFloat32:
 		return dxgi.DXGI_FORMAT_R32_FLOAT, nil
-	case VertexFormatFloat32x2:
+	case gpu.VertexFormatFloat32x2:
 		return dxgi.DXGI_FORMAT_R32G32_FLOAT, nil
-	case VertexFormatFloat32x3:
+	case gpu.VertexFormatFloat32x3:
 		return dxgi.DXGI_FORMAT_R32G32B32_FLOAT, nil
-	case VertexFormatFloat32x4:
+	case gpu.VertexFormatFloat32x4:
 		return dxgi.DXGI_FORMAT_R32G32B32A32_FLOAT, nil
 	}
 	return dxgi.DXGI_FORMAT_UNKNOWN, fmt.Errorf("gpu: vertex format %d is not supported by the d3d12 backend", int(format))
 }
 
-func d3d12CullMode(mode CullMode) (d3d12.D3D12_CULL_MODE, error) {
+func d3d12CullMode(mode gpu.CullMode) (d3d12.D3D12_CULL_MODE, error) {
 	switch mode {
-	case CullModeNone:
+	case gpu.CullModeNone:
 		return d3d12.D3D12_CULL_MODE_NONE, nil
-	case CullModeFront:
+	case gpu.CullModeFront:
 		return d3d12.D3D12_CULL_MODE_FRONT, nil
-	case CullModeBack:
+	case gpu.CullModeBack:
 		return d3d12.D3D12_CULL_MODE_BACK, nil
 	}
 	return d3d12.D3D12_CULL_MODE_NONE, fmt.Errorf("gpu: cull mode %d is not supported by the d3d12 backend", int(mode))
@@ -356,8 +357,8 @@ func boolToUint32(value bool) uint32 {
 	return 0
 }
 
-func (p *d3d12RenderPass) SetPipeline(pipeline *RenderPipeline) error {
-	impl, ok := pipeline.b.(*d3d12Pipeline)
+func (p *d3d12RenderPass) SetPipeline(pipeline gpu.RenderPipelineBackend) error {
+	impl, ok := pipeline.(*d3d12Pipeline)
 	if !ok {
 		return errors.New("gpu: render pipeline is not a d3d12 pipeline")
 	}
@@ -367,12 +368,12 @@ func (p *d3d12RenderPass) SetPipeline(pipeline *RenderPipeline) error {
 	return nil
 }
 
-func (p *d3d12RenderPass) SetVertexBuffer(slot uint32, buffer *Buffer) error {
-	impl, ok := buffer.b.(*d3d12Buffer)
+func (p *d3d12RenderPass) SetVertexBuffer(slot uint32, buffer gpu.BufferBackend) error {
+	impl, ok := buffer.(*d3d12Buffer)
 	if !ok {
 		return errors.New("gpu: vertex buffer is not a d3d12 buffer")
 	}
-	if impl.usage&BufferUsageVertex == 0 {
+	if impl.usage&gpu.BufferUsageVertex == 0 {
 		return errors.New("gpu: buffer was not created with vertex usage")
 	}
 	if slot >= 32 {
@@ -385,8 +386,8 @@ func (p *d3d12RenderPass) SetVertexBuffer(slot uint32, buffer *Buffer) error {
 	return nil
 }
 
-func (p *d3d12RenderPass) SetBindGroup(index uint32, group *BindGroup) error {
-	impl, ok := group.b.(*d3d12BindGroup)
+func (p *d3d12RenderPass) SetBindGroup(index uint32, group gpu.BindGroupBackend) error {
+	impl, ok := group.(*d3d12BindGroup)
 	if !ok {
 		return errors.New("gpu: bind group is not a d3d12 bind group")
 	}
@@ -516,7 +517,7 @@ func (p *d3d12RenderPass) bindResourceGroups() error {
 	for _, bindingGroup := range groups {
 		for _, binding := range bindingGroup.bindings {
 			var handle d3d12.D3D12_GPU_DESCRIPTOR_HANDLE
-			if binding.entry.Type == BindingTypeSampler {
+			if binding.entry.Type == gpu.BindingTypeSampler {
 				handle = bindingGroup.group.samplerHeap.gpuStart
 				register := bindingGroup.group.layout.samplerRegister[binding.entry.Binding]
 				handle.Ptr += uint64(register) * uint64(bindingGroup.group.samplerHeap.stride)

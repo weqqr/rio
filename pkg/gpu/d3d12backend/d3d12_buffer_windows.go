@@ -1,4 +1,4 @@
-package gpu
+package d3d12backend
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/weqqr/rio/pkg/com"
+	"github.com/weqqr/rio/pkg/gpu"
 	"github.com/weqqr/rio/pkg/sys/d3d12"
 	"github.com/weqqr/rio/pkg/sys/dxgi"
 )
@@ -16,7 +17,7 @@ type d3d12Buffer struct {
 	device   *d3d12Device
 	resource d3d12.ID3D12Resource
 	size     uint64
-	usage    BufferUsage
+	usage    gpu.BufferUsage
 	heapType d3d12.D3D12_HEAP_TYPE
 	state    d3d12.D3D12_RESOURCE_STATES
 
@@ -25,33 +26,33 @@ type d3d12Buffer struct {
 	mappedSize   uint64
 }
 
-func (d *d3d12Device) CreateBuffer(desc *BufferDescriptor) (bufferBackend, error) {
+func (d *d3d12Device) CreateBuffer(desc *gpu.BufferDescriptor) (gpu.BufferBackend, error) {
 	if desc.Size == 0 {
 		return nil, errors.New("gpu: buffer size must be greater than zero")
 	}
 	if desc.Size%bufferCopyAlignment != 0 {
 		return nil, fmt.Errorf("gpu: buffer size %d is not a multiple of %d", desc.Size, bufferCopyAlignment)
 	}
-	if desc.Usage == BufferUsageNone {
+	if desc.Usage == gpu.BufferUsageNone {
 		return nil, errors.New("gpu: buffer requires at least one usage")
 	}
-	if desc.Usage&BufferUsageMapRead != 0 {
+	if desc.Usage&gpu.BufferUsageMapRead != 0 {
 		return nil, errors.New("gpu: d3d12 map-read buffers are not implemented")
 	}
-	if desc.MappedAtCreation && desc.Usage&BufferUsageMapWrite == 0 {
+	if desc.MappedAtCreation && desc.Usage&gpu.BufferUsageMapWrite == 0 {
 		return nil, errors.New("gpu: a mapped-at-creation buffer requires map-write usage")
 	}
-	if desc.MappedAtCreation && desc.Usage&BufferUsageCopyDst != 0 {
+	if desc.MappedAtCreation && desc.Usage&gpu.BufferUsageCopyDst != 0 {
 		return nil, errors.New("gpu: a mapped-at-creation buffer cannot also be a copy destination")
 	}
 
-	upload := desc.MappedAtCreation || desc.Usage&BufferUsageMapWrite != 0
+	upload := desc.MappedAtCreation || desc.Usage&gpu.BufferUsageMapWrite != 0
 	heapType := d3d12.D3D12_HEAP_TYPE_DEFAULT
 	initialState := resourceStateForUsage(desc.Usage)
 	if upload {
 		heapType = d3d12.D3D12_HEAP_TYPE_UPLOAD
 		initialState = d3d12.D3D12_RESOURCE_STATE_GENERIC_READ
-	} else if desc.Usage&BufferUsageCopyDst != 0 {
+	} else if desc.Usage&gpu.BufferUsageCopyDst != 0 {
 		initialState = d3d12.D3D12_RESOURCE_STATE_COPY_DEST
 	}
 
@@ -79,7 +80,7 @@ func (d *d3d12Device) CreateBuffer(desc *BufferDescriptor) (bufferBackend, error
 		return nil, fmt.Errorf("gpu: create buffer: %w", hr.Err())
 	}
 	if desc.MappedAtCreation {
-		if err := buffer.MapAsync(MapModeWrite, 0, desc.Size); err != nil {
+		if err := buffer.MapAsync(gpu.MapModeWrite, 0, desc.Size); err != nil {
 			buffer.Destroy()
 			return nil, err
 		}
@@ -87,11 +88,11 @@ func (d *d3d12Device) CreateBuffer(desc *BufferDescriptor) (bufferBackend, error
 	return buffer, nil
 }
 
-func resourceStateForUsage(usage BufferUsage) d3d12.D3D12_RESOURCE_STATES {
+func resourceStateForUsage(usage gpu.BufferUsage) d3d12.D3D12_RESOURCE_STATES {
 	switch {
-	case usage&(BufferUsageVertex|BufferUsageUniform) != 0:
+	case usage&(gpu.BufferUsageVertex|gpu.BufferUsageUniform) != 0:
 		return d3d12.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER
-	case usage&BufferUsageIndex != 0:
+	case usage&gpu.BufferUsageIndex != 0:
 		return d3d12.D3D12_RESOURCE_STATE_INDEX_BUFFER
 	}
 	return d3d12.D3D12_RESOURCE_STATE_COMMON
@@ -99,10 +100,10 @@ func resourceStateForUsage(usage BufferUsage) d3d12.D3D12_RESOURCE_STATES {
 
 func (b *d3d12Buffer) Size() uint64 { return b.size }
 
-func (b *d3d12Buffer) Usage() BufferUsage { return b.usage }
+func (b *d3d12Buffer) Usage() gpu.BufferUsage { return b.usage }
 
-func (b *d3d12Buffer) MapAsync(mode MapMode, offset, size uint64) error {
-	if mode != MapModeWrite {
+func (b *d3d12Buffer) MapAsync(mode gpu.MapMode, offset, size uint64) error {
+	if mode != gpu.MapModeWrite {
 		return errors.New("gpu: d3d12 only supports write mapping")
 	}
 	if b.heapType != d3d12.D3D12_HEAP_TYPE_UPLOAD {
@@ -160,12 +161,12 @@ func (b *d3d12Buffer) Destroy() {
 	}
 }
 
-func (q *d3d12Queue) WriteBuffer(buffer *Buffer, offset uint64, data []byte) error {
-	dst, ok := buffer.b.(*d3d12Buffer)
+func (q *d3d12Queue) WriteBuffer(buffer gpu.BufferBackend, offset uint64, data []byte) error {
+	dst, ok := buffer.(*d3d12Buffer)
 	if !ok {
 		return errors.New("gpu: write buffer target is not a d3d12 buffer")
 	}
-	if dst.usage&BufferUsageCopyDst == 0 {
+	if dst.usage&gpu.BufferUsageCopyDst == 0 {
 		return errors.New("gpu: buffer was not created with copy-destination usage")
 	}
 	if len(data) == 0 {
@@ -179,18 +180,17 @@ func (q *d3d12Queue) WriteBuffer(buffer *Buffer, offset uint64, data []byte) err
 		return fmt.Errorf("gpu: write buffer range [%d, %d) is out of bounds for a %d-byte buffer", offset, offset+size, dst.size)
 	}
 
-	stagingImpl, err := q.device.CreateBuffer(&BufferDescriptor{
+	staging, err := q.device.CreateBuffer(&gpu.BufferDescriptor{
 		Label: "staging",
 		Size:  size,
-		Usage: BufferUsageMapWrite | BufferUsageCopySrc,
+		Usage: gpu.BufferUsageMapWrite | gpu.BufferUsageCopySrc,
 	})
 	if err != nil {
 		return err
 	}
-	staging := &Buffer{b: stagingImpl}
 	defer staging.Destroy()
 
-	if err := staging.MapAsync(MapModeWrite, 0, size); err != nil {
+	if err := staging.MapAsync(gpu.MapModeWrite, 0, size); err != nil {
 		return err
 	}
 	mapped, err := staging.GetMappedRange(0, size)
@@ -200,11 +200,10 @@ func (q *d3d12Queue) WriteBuffer(buffer *Buffer, offset uint64, data []byte) err
 	copy(mapped, data)
 	staging.Unmap()
 
-	encoderImpl, err := q.device.CreateCommandEncoder()
+	encoder, err := q.device.CreateCommandEncoder()
 	if err != nil {
 		return err
 	}
-	encoder := &CommandEncoder{b: encoderImpl}
 	if err := encoder.CopyBufferToBuffer(staging, 0, buffer, offset, size); err != nil {
 		return err
 	}
@@ -212,22 +211,22 @@ func (q *d3d12Queue) WriteBuffer(buffer *Buffer, offset uint64, data []byte) err
 	if err != nil {
 		return err
 	}
-	return q.Submit([]*CommandBuffer{commands})
+	return q.Submit([]gpu.CommandBufferBackend{commands})
 }
 
-func (e *d3d12Encoder) CopyBufferToBuffer(src *Buffer, srcOffset uint64, dst *Buffer, dstOffset uint64, size uint64) error {
-	srcBuffer, ok := src.b.(*d3d12Buffer)
+func (e *d3d12Encoder) CopyBufferToBuffer(src gpu.BufferBackend, srcOffset uint64, dst gpu.BufferBackend, dstOffset uint64, size uint64) error {
+	srcBuffer, ok := src.(*d3d12Buffer)
 	if !ok {
 		return errors.New("gpu: copy source is not a d3d12 buffer")
 	}
-	dstBuffer, ok := dst.b.(*d3d12Buffer)
+	dstBuffer, ok := dst.(*d3d12Buffer)
 	if !ok {
 		return errors.New("gpu: copy destination is not a d3d12 buffer")
 	}
-	if srcBuffer.usage&BufferUsageCopySrc == 0 {
+	if srcBuffer.usage&gpu.BufferUsageCopySrc == 0 {
 		return errors.New("gpu: source buffer was not created with copy-source usage")
 	}
-	if dstBuffer.usage&BufferUsageCopyDst == 0 {
+	if dstBuffer.usage&gpu.BufferUsageCopyDst == 0 {
 		return errors.New("gpu: destination buffer was not created with copy-destination usage")
 	}
 	if size == 0 {

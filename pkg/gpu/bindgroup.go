@@ -31,7 +31,7 @@ type BindGroupLayoutDescriptor struct {
 }
 
 type BindGroupLayout struct {
-	b bindGroupLayoutBackend
+	b BindGroupLayoutBackend
 }
 
 func (d *Device) CreateBindGroupLayout(desc *BindGroupLayoutDescriptor) (*BindGroupLayout, error) {
@@ -61,6 +61,8 @@ func (d *Device) CreateBindGroupLayout(desc *BindGroupLayoutDescriptor) (*BindGr
 
 func (l *BindGroupLayout) Destroy() { l.b.Destroy() }
 
+func (l *BindGroupLayout) Backend() BindGroupLayoutBackend { return l.b }
+
 type BindingResource struct {
 	Buffer      *Buffer
 	Sampler     *Sampler
@@ -79,7 +81,7 @@ type BindGroupDescriptor struct {
 }
 
 type BindGroup struct {
-	b bindGroupBackend
+	b BindGroupBackend
 }
 
 func (d *Device) CreateBindGroup(desc *BindGroupDescriptor) (*BindGroup, error) {

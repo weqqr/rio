@@ -1,4 +1,4 @@
-package gpu
+package d3d12backend
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/weqqr/rio/pkg/com"
+	"github.com/weqqr/rio/pkg/gpu"
 	"github.com/weqqr/rio/pkg/sys/d3d12"
 	"github.com/weqqr/rio/pkg/sys/dxgi"
 	"github.com/weqqr/rio/pkg/sys/win32"
@@ -21,7 +22,7 @@ type d3d12Instance struct {
 	factory dxgi.IDXGIFactory2
 }
 
-func newD3D12Instance() (*d3d12Instance, error) {
+func New() (gpu.InstanceBackend, error) {
 	instance := &d3d12Instance{}
 	if hr := dxgi.CreateDXGIFactory2(0, &dxgi.IID_IDXGIFactory2, &instance.factory.Object); hr.Failed() {
 		return nil, hr.Err()
@@ -29,18 +30,18 @@ func newD3D12Instance() (*d3d12Instance, error) {
 	return instance, nil
 }
 
-func (i *d3d12Instance) Backend() Backend { return BackendD3D12 }
+func (i *d3d12Instance) Backend() gpu.Backend { return gpu.BackendD3D12 }
 
-func (i *d3d12Instance) CreateSurface(target SurfaceTarget) (surfaceBackend, error) {
+func (i *d3d12Instance) CreateSurface(target gpu.SurfaceTarget) (gpu.SurfaceBackend, error) {
 	if target.Handle == 0 {
 		return nil, errors.New("gpu: surface target has no window handle")
 	}
 	return &d3d12Surface{factory: i.factory, target: target}, nil
 }
 
-func (i *d3d12Instance) RequestAdapter(opts *RequestAdapterOptions) (adapterBackend, error) {
+func (i *d3d12Instance) RequestAdapter(opts *gpu.RequestAdapterOptions) (gpu.AdapterBackend, error) {
 	if opts != nil && opts.Surface != nil {
-		if _, ok := opts.Surface.b.(*d3d12Surface); !ok {
+		if _, ok := opts.Surface.Backend().(*d3d12Surface); !ok {
 			return nil, errors.New("gpu: d3d12 cannot present to a surface from another backend")
 		}
 	}
@@ -56,7 +57,7 @@ func (i *d3d12Instance) Close() {
 
 type d3d12Adapter struct{}
 
-func (a *d3d12Adapter) RequestDevice() (deviceBackend, error) {
+func (a *d3d12Adapter) RequestDevice() (gpu.DeviceBackend, error) {
 	device := &d3d12Device{}
 	if hr := d3d12.D3D12CreateDevice(0, d3d12.D3D_FEATURE_LEVEL_11_0, &d3d12.IID_ID3D12Device, &device.device.Object); hr.Failed() {
 		return nil, hr.Err()
@@ -104,9 +105,9 @@ type d3d12Device struct {
 	fenceValue uint64
 }
 
-func (d *d3d12Device) Queue() queueBackend { return &d3d12Queue{device: d} }
+func (d *d3d12Device) Queue() gpu.QueueBackend { return &d3d12Queue{device: d} }
 
-func (d *d3d12Device) CreateCommandEncoder() (encoderBackend, error) {
+func (d *d3d12Device) CreateCommandEncoder() (gpu.EncoderBackend, error) {
 	if hr := d.allocator.Reset(); hr.Failed() {
 		return nil, hr.Err()
 	}
@@ -170,13 +171,13 @@ type d3d12Queue struct {
 	device *d3d12Device
 }
 
-func (q *d3d12Queue) Submit(cmds []*CommandBuffer) error {
+func (q *d3d12Queue) Submit(cmds []gpu.CommandBufferBackend) error {
 	if len(cmds) == 0 {
 		return nil
 	}
 	lists := make([]unsafe.Pointer, len(cmds))
 	for i, cmd := range cmds {
-		buffer, ok := cmd.b.(*d3d12CommandBuffer)
+		buffer, ok := cmd.(*d3d12CommandBuffer)
 		if !ok {
 			return errors.New("gpu: command buffer is not a d3d12 command buffer")
 		}
@@ -190,16 +191,16 @@ type d3d12Encoder struct {
 	device *d3d12Device
 }
 
-func (e *d3d12Encoder) BeginRenderPass(desc *RenderPassDescriptor) (renderPassBackend, error) {
+func (e *d3d12Encoder) BeginRenderPass(desc *gpu.RenderPassDescriptor) (gpu.RenderPassBackend, error) {
 	views := make([]*d3d12View, len(desc.ColorAttachments))
 	handles := make([]d3d12.D3D12_CPU_DESCRIPTOR_HANDLE, len(desc.ColorAttachments))
 	afterStates := make([]d3d12.D3D12_RESOURCE_STATES, len(desc.ColorAttachments))
 	for i := range desc.ColorAttachments {
 		attachment := &desc.ColorAttachments[i]
-		if attachment.StoreOp != StoreOpStore {
+		if attachment.StoreOp != gpu.StoreOpStore {
 			return nil, fmt.Errorf("gpu: store op %d is not implemented by the d3d12 backend", int(attachment.StoreOp))
 		}
-		view, ok := attachment.View.b.(*d3d12View)
+		view, ok := attachment.View.Backend().(*d3d12View)
 		if !ok {
 			return nil, errors.New("gpu: color attachment view is not a d3d12 texture view")
 		}
@@ -227,16 +228,16 @@ func (e *d3d12Encoder) BeginRenderPass(desc *RenderPassDescriptor) (renderPassBa
 	e.device.list.OMSetRenderTargets(uint32(len(handles)), &handles[0], 0, 0)
 
 	for i := range desc.ColorAttachments {
-		if desc.ColorAttachments[i].LoadOp != LoadOpClear {
+		if desc.ColorAttachments[i].LoadOp != gpu.LoadOpClear {
 			continue
 		}
-		color := desc.ColorAttachments[i].ClearValue.rgba()
+		color := rgba(desc.ColorAttachments[i].ClearValue)
 		e.device.list.ClearRenderTargetView(handles[i], &color, 0, 0)
 	}
 	return &d3d12RenderPass{device: e.device, views: views, afterStates: afterStates}, nil
 }
 
-func (e *d3d12Encoder) Finish() (commandBufferBackend, error) {
+func (e *d3d12Encoder) Finish() (gpu.CommandBufferBackend, error) {
 	if hr := e.device.list.Close(); hr.Failed() {
 		return nil, hr.Err()
 	}

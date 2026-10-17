@@ -26,8 +26,8 @@ type Renderer struct {
 	bindGroup       *gpu.BindGroup
 }
 
-func New(target gpu.SurfaceTarget) (*Renderer, error) {
-	instance, err := gpu.New(nil)
+func New(backend gpu.InstanceBackend, target gpu.SurfaceTarget) (*Renderer, error) {
+	instance, err := gpu.New(backend)
 	if err != nil {
 		return nil, err
 	}

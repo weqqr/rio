@@ -8,7 +8,7 @@ type ShaderModuleDescriptor struct {
 }
 
 type ShaderModule struct {
-	b shaderModuleBackend
+	b ShaderModuleBackend
 }
 
 func (d *Device) CreateShaderModule(desc *ShaderModuleDescriptor) (*ShaderModule, error) {
@@ -23,6 +23,8 @@ func (d *Device) CreateShaderModule(desc *ShaderModuleDescriptor) (*ShaderModule
 }
 
 func (m *ShaderModule) Destroy() { m.b.Destroy() }
+
+func (m *ShaderModule) Backend() ShaderModuleBackend { return m.b }
 
 type VertexFormat int
 
@@ -121,7 +123,7 @@ type RenderPipelineDescriptor struct {
 }
 
 type RenderPipeline struct {
-	b renderPipelineBackend
+	b RenderPipelineBackend
 }
 
 func (d *Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (*RenderPipeline, error) {
@@ -143,7 +145,7 @@ type PipelineLayoutDescriptor struct {
 }
 
 type PipelineLayout struct {
-	b pipelineLayoutBackend
+	b PipelineLayoutBackend
 }
 
 func (d *Device) CreatePipelineLayout(desc *PipelineLayoutDescriptor) (*PipelineLayout, error) {
@@ -158,3 +160,5 @@ func (d *Device) CreatePipelineLayout(desc *PipelineLayoutDescriptor) (*Pipeline
 }
 
 func (l *PipelineLayout) Destroy() { l.b.Destroy() }
+
+func (l *PipelineLayout) Backend() PipelineLayoutBackend { return l.b }

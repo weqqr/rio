@@ -1,4 +1,4 @@
-package gpu
+package d3d12backend
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 	"unsafe"
 
 	"github.com/weqqr/rio/pkg/com"
+	"github.com/weqqr/rio/pkg/gpu"
 	"github.com/weqqr/rio/pkg/sys/d3d12"
 	"github.com/weqqr/rio/pkg/sys/dxgi"
 )
@@ -22,21 +23,21 @@ type d3d12Texture struct {
 	device        *d3d12Device
 	resource      d3d12.ID3D12Resource
 	format        dxgi.DXGI_FORMAT
-	usage         TextureUsage
+	usage         gpu.TextureUsage
 	state         d3d12.D3D12_RESOURCE_STATES
 	mipLevelCount uint32
 	width         uint32
 	height        uint32
 }
 
-func (d *d3d12Device) CreateTexture(desc *TextureDescriptor) (textureBackend, error) {
+func (d *d3d12Device) CreateTexture(desc *gpu.TextureDescriptor) (gpu.TextureBackend, error) {
 	if desc.Size.DepthOrArrayLayers != 1 {
 		return nil, errors.New("gpu: array textures are not implemented by the d3d12 backend")
 	}
 	if desc.MipLevelCount > 0xFFFF {
 		return nil, errors.New("gpu: texture mip level count exceeds the d3d12 limit")
 	}
-	if desc.Usage&TextureUsageStorageBinding != 0 {
+	if desc.Usage&gpu.TextureUsageStorageBinding != 0 {
 		return nil, errors.New("gpu: storage texture bindings are not implemented by the d3d12 backend")
 	}
 	format, err := dxgiFormat(desc.Format)
@@ -44,14 +45,14 @@ func (d *d3d12Device) CreateTexture(desc *TextureDescriptor) (textureBackend, er
 		return nil, err
 	}
 	flags := d3d12.D3D12_RESOURCE_FLAG_NONE
-	if desc.Usage&TextureUsageRenderAttachment != 0 {
+	if desc.Usage&gpu.TextureUsageRenderAttachment != 0 {
 		flags |= d3d12.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET
 	}
 	initialState := d3d12.D3D12_RESOURCE_STATE_COMMON
 	switch {
-	case desc.Usage&TextureUsageCopyDst != 0:
+	case desc.Usage&gpu.TextureUsageCopyDst != 0:
 		initialState = d3d12.D3D12_RESOURCE_STATE_COPY_DEST
-	case desc.Usage&TextureUsageTextureBinding != 0:
+	case desc.Usage&gpu.TextureUsageTextureBinding != 0:
 		initialState = d3d12.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE
 	}
 
@@ -82,15 +83,15 @@ func (d *d3d12Device) CreateTexture(desc *TextureDescriptor) (textureBackend, er
 	return texture, nil
 }
 
-func (t *d3d12Texture) CreateView(desc *TextureViewDescriptor) (viewBackend, error) {
+func (t *d3d12Texture) CreateView(desc *gpu.TextureViewDescriptor) (gpu.ViewBackend, error) {
 	baseMipLevel := uint32(0)
 	mipLevelCount := t.mipLevelCount
 	format := t.format
 	if desc != nil {
-		if desc.Dimension == TextureViewDimension2DArray {
+		if desc.Dimension == gpu.TextureViewDimension2DArray {
 			return nil, errors.New("gpu: array texture views are not implemented by the d3d12 backend")
 		}
-		if desc.Format != TextureFormatUndefined {
+		if desc.Format != gpu.TextureFormatUndefined {
 			viewFormat, err := dxgiFormat(desc.Format)
 			if err != nil {
 				return nil, err
@@ -115,7 +116,7 @@ func (t *d3d12Texture) CreateView(desc *TextureViewDescriptor) (viewBackend, err
 		mipLevelCount: mipLevelCount,
 		texture:       t,
 	}
-	if t.usage&TextureUsageRenderAttachment != 0 {
+	if t.usage&gpu.TextureUsageRenderAttachment != 0 {
 		heapDesc := d3d12.D3D12_DESCRIPTOR_HEAP_DESC{
 			Type:           d3d12.D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
 			NumDescriptors: 1,
@@ -141,7 +142,7 @@ type d3d12Sampler struct {
 	desc d3d12.D3D12_SAMPLER_DESC
 }
 
-func (d *d3d12Device) CreateSampler(desc *SamplerDescriptor) (samplerBackend, error) {
+func (d *d3d12Device) CreateSampler(desc *gpu.SamplerDescriptor) (gpu.SamplerBackend, error) {
 	samplerDesc, err := samplerDescriptor(desc)
 	if err != nil {
 		return nil, err
@@ -152,8 +153,8 @@ func (d *d3d12Device) CreateSampler(desc *SamplerDescriptor) (samplerBackend, er
 func (s *d3d12Sampler) Destroy() {}
 
 type d3d12BindGroupLayout struct {
-	entries         []BindGroupLayoutEntry
-	entryByBinding  map[uint32]BindGroupLayoutEntry
+	entries         []gpu.BindGroupLayoutEntry
+	entryByBinding  map[uint32]gpu.BindGroupLayoutEntry
 	textureRegister map[uint32]uint32
 	samplerRegister map[uint32]uint32
 	hasTexture      bool
@@ -162,10 +163,10 @@ type d3d12BindGroupLayout struct {
 	samplerCount    uint32
 }
 
-func (d *d3d12Device) CreateBindGroupLayout(desc *BindGroupLayoutDescriptor) (bindGroupLayoutBackend, error) {
+func (d *d3d12Device) CreateBindGroupLayout(desc *gpu.BindGroupLayoutDescriptor) (gpu.BindGroupLayoutBackend, error) {
 	layout := &d3d12BindGroupLayout{
-		entries:         append([]BindGroupLayoutEntry(nil), desc.Entries...),
-		entryByBinding:  make(map[uint32]BindGroupLayoutEntry, len(desc.Entries)),
+		entries:         append([]gpu.BindGroupLayoutEntry(nil), desc.Entries...),
+		entryByBinding:  make(map[uint32]gpu.BindGroupLayoutEntry, len(desc.Entries)),
 		textureRegister: make(map[uint32]uint32),
 		samplerRegister: make(map[uint32]uint32),
 	}
@@ -178,11 +179,11 @@ func (d *d3d12Device) CreateBindGroupLayout(desc *BindGroupLayoutDescriptor) (bi
 		}
 		layout.entryByBinding[entry.Binding] = entry
 		switch entry.Type {
-		case BindingTypeTexture:
+		case gpu.BindingTypeTexture:
 			layout.hasTexture = true
 			layout.textureRegister[entry.Binding] = layout.textureCount
 			layout.textureCount++
-		case BindingTypeSampler:
+		case gpu.BindingTypeSampler:
 			layout.hasSampler = true
 			layout.samplerRegister[entry.Binding] = layout.samplerCount
 			layout.samplerCount++
@@ -230,8 +231,8 @@ type d3d12BindGroup struct {
 	samplerHeap d3d12DescriptorHeapInfo
 }
 
-func (d *d3d12Device) CreateBindGroup(desc *BindGroupDescriptor) (bindGroupBackend, error) {
-	layout, ok := desc.Layout.b.(*d3d12BindGroupLayout)
+func (d *d3d12Device) CreateBindGroup(desc *gpu.BindGroupDescriptor) (gpu.BindGroupBackend, error) {
+	layout, ok := desc.Layout.Backend().(*d3d12BindGroupLayout)
 	if !ok {
 		return nil, errors.New("gpu: bind group layout is not a d3d12 layout")
 	}
@@ -248,11 +249,11 @@ func (d *d3d12Device) CreateBindGroup(desc *BindGroupDescriptor) (bindGroupBacke
 		}
 		seen[entry.Binding] = struct{}{}
 		switch layoutEntry.Type {
-		case BindingTypeTexture:
+		case gpu.BindingTypeTexture:
 			if entry.Resource.TextureView == nil {
 				return nil, fmt.Errorf("gpu: bind group entry %d requires a texture view", entry.Binding)
 			}
-		case BindingTypeSampler:
+		case gpu.BindingTypeSampler:
 			if entry.Resource.Sampler == nil {
 				return nil, fmt.Errorf("gpu: bind group entry %d requires a sampler", entry.Binding)
 			}
@@ -285,13 +286,13 @@ func (d *d3d12Device) CreateBindGroup(desc *BindGroupDescriptor) (bindGroupBacke
 		entry := &desc.Entries[i]
 		layoutEntry := layout.entryByBinding[entry.Binding]
 		switch layoutEntry.Type {
-		case BindingTypeTexture:
-			view, ok := entry.Resource.TextureView.b.(*d3d12View)
+		case gpu.BindingTypeTexture:
+			view, ok := entry.Resource.TextureView.Backend().(*d3d12View)
 			if !ok {
 				group.Destroy()
 				return nil, errors.New("gpu: texture view is not a d3d12 texture view")
 			}
-			if view.texture != nil && view.texture.usage&TextureUsageTextureBinding == 0 {
+			if view.texture != nil && view.texture.usage&gpu.TextureUsageTextureBinding == 0 {
 				group.Destroy()
 				return nil, errors.New("gpu: texture was not created with texture-binding usage")
 			}
@@ -301,8 +302,8 @@ func (d *d3d12Device) CreateBindGroup(desc *BindGroupDescriptor) (bindGroupBacke
 				group.Destroy()
 				return nil, err
 			}
-		case BindingTypeSampler:
-			sampler, ok := entry.Resource.Sampler.b.(*d3d12Sampler)
+		case gpu.BindingTypeSampler:
+			sampler, ok := entry.Resource.Sampler.Backend().(*d3d12Sampler)
 			if !ok {
 				group.Destroy()
 				return nil, errors.New("gpu: sampler is not a d3d12 sampler")
@@ -345,7 +346,7 @@ func (d *d3d12Device) createSRV(view *d3d12View, handle d3d12.D3D12_CPU_DESCRIPT
 
 type d3d12RootBinding struct {
 	param uint32
-	entry BindGroupLayoutEntry
+	entry gpu.BindGroupLayoutEntry
 }
 
 type d3d12PipelineLayout struct {
@@ -354,7 +355,7 @@ type d3d12PipelineLayout struct {
 	bindings  [][]d3d12RootBinding
 }
 
-func (d *d3d12Device) CreatePipelineLayout(desc *PipelineLayoutDescriptor) (pipelineLayoutBackend, error) {
+func (d *d3d12Device) CreatePipelineLayout(desc *gpu.PipelineLayoutDescriptor) (gpu.PipelineLayoutBackend, error) {
 	layout := &d3d12PipelineLayout{
 		groups:   make([]*d3d12BindGroupLayout, len(desc.BindGroupLayouts)),
 		bindings: make([][]d3d12RootBinding, len(desc.BindGroupLayouts)),
@@ -365,7 +366,7 @@ func (d *d3d12Device) CreatePipelineLayout(desc *PipelineLayoutDescriptor) (pipe
 		if bindGroupLayout == nil {
 			return nil, errors.New("gpu: pipeline layout has a nil bind group layout")
 		}
-		group, ok := bindGroupLayout.b.(*d3d12BindGroupLayout)
+		group, ok := bindGroupLayout.Backend().(*d3d12BindGroupLayout)
 		if !ok {
 			return nil, errors.New("gpu: bind group layout is not a d3d12 layout")
 		}
@@ -374,7 +375,7 @@ func (d *d3d12Device) CreatePipelineLayout(desc *PipelineLayoutDescriptor) (pipe
 		for _, entry := range group.entries {
 			rangeType := d3d12.D3D12_DESCRIPTOR_RANGE_TYPE_SRV
 			baseRegister := group.textureRegister[entry.Binding]
-			if entry.Type == BindingTypeSampler {
+			if entry.Type == gpu.BindingTypeSampler {
 				rangeType = d3d12.D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER
 				baseRegister = group.samplerRegister[entry.Binding]
 			}
@@ -461,12 +462,12 @@ func (d *d3d12Device) createRootSignature(params []d3d12.D3D12_ROOT_PARAMETER, r
 	return signature, nil
 }
 
-func (q *d3d12Queue) WriteTexture(dst *ImageCopyTexture, data []byte, layout *ImageDataLayout, size Extent3D) error {
-	texture, ok := dst.Texture.b.(*d3d12Texture)
+func (q *d3d12Queue) WriteTexture(dst *gpu.ImageCopyTexture, data []byte, layout *gpu.ImageDataLayout, size gpu.Extent3D) error {
+	texture, ok := dst.Texture.Backend().(*d3d12Texture)
 	if !ok {
 		return errors.New("gpu: write texture target is not a d3d12 texture")
 	}
-	if texture.usage&TextureUsageCopyDst == 0 {
+	if texture.usage&gpu.TextureUsageCopyDst == 0 {
 		return errors.New("gpu: texture was not created with copy-destination usage")
 	}
 	if size.DepthOrArrayLayers != 1 || dst.Origin.Z != 0 {
@@ -506,10 +507,10 @@ func (q *d3d12Queue) WriteTexture(dst *ImageCopyTexture, data []byte, layout *Im
 	rowPitch := alignUp(userRowPitch, textureDataPitchAlignment)
 	uploadSize := alignUp(rowPitch*uint64(size.Height), textureDataPlacementAlignment)
 
-	upload, err := q.device.CreateBuffer(&BufferDescriptor{
+	upload, err := q.device.CreateBuffer(&gpu.BufferDescriptor{
 		Label:            "texture upload",
 		Size:             uploadSize,
-		Usage:            BufferUsageMapWrite | BufferUsageCopySrc,
+		Usage:            gpu.BufferUsageMapWrite | gpu.BufferUsageCopySrc,
 		MappedAtCreation: true,
 	})
 	if err != nil {
@@ -559,7 +560,7 @@ func (q *d3d12Queue) WriteTexture(dst *ImageCopyTexture, data []byte, layout *Im
 	}
 	encoder.device.list.CopyTextureRegion(&destination, dst.Origin.X, dst.Origin.Y, 0, &source, nil)
 	finalState := d3d12.D3D12_RESOURCE_STATE_COMMON
-	if texture.usage&TextureUsageTextureBinding != 0 {
+	if texture.usage&gpu.TextureUsageTextureBinding != 0 {
 		finalState = d3d12.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE
 	}
 	if finalState != d3d12.D3D12_RESOURCE_STATE_COPY_DEST {
@@ -570,7 +571,7 @@ func (q *d3d12Queue) WriteTexture(dst *ImageCopyTexture, data []byte, layout *Im
 	if err != nil {
 		return fmt.Errorf("gpu: write texture commands: %w", err)
 	}
-	if err := q.Submit([]*CommandBuffer{{b: commands}}); err != nil {
+	if err := q.Submit([]gpu.CommandBufferBackend{commands}); err != nil {
 		return fmt.Errorf("gpu: submit texture upload: %w", err)
 	}
 	return nil
@@ -580,8 +581,8 @@ func alignUp(value, alignment uint64) uint64 {
 	return (value + alignment - 1) &^ (alignment - 1)
 }
 
-func textureStateAfterUse(usage TextureUsage) d3d12.D3D12_RESOURCE_STATES {
-	if usage&TextureUsageTextureBinding != 0 {
+func textureStateAfterUse(usage gpu.TextureUsage) d3d12.D3D12_RESOURCE_STATES {
+	if usage&gpu.TextureUsageTextureBinding != 0 {
 		return d3d12.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE
 	}
 	return d3d12.D3D12_RESOURCE_STATE_COMMON
@@ -595,19 +596,19 @@ func textureBytesPerPixel(format dxgi.DXGI_FORMAT) (uint32, error) {
 	return 0, fmt.Errorf("gpu: texture format %d is not supported by the d3d12 backend", int(format))
 }
 
-func shaderVisibility(stage ShaderStage) (d3d12.D3D12_SHADER_VISIBILITY, error) {
+func shaderVisibility(stage gpu.ShaderStage) (d3d12.D3D12_SHADER_VISIBILITY, error) {
 	switch stage {
-	case ShaderStageVertex:
+	case gpu.ShaderStageVertex:
 		return d3d12.D3D12_SHADER_VISIBILITY_VERTEX, nil
-	case ShaderStageFragment:
+	case gpu.ShaderStageFragment:
 		return d3d12.D3D12_SHADER_VISIBILITY_PIXEL, nil
-	case ShaderStageVertex | ShaderStageFragment:
+	case gpu.ShaderStageVertex | gpu.ShaderStageFragment:
 		return d3d12.D3D12_SHADER_VISIBILITY_ALL, nil
 	}
 	return d3d12.D3D12_SHADER_VISIBILITY_ALL, errors.New("gpu: shader stage combination is not supported by the d3d12 backend")
 }
 
-func samplerDescriptor(desc *SamplerDescriptor) (d3d12.D3D12_SAMPLER_DESC, error) {
+func samplerDescriptor(desc *gpu.SamplerDescriptor) (d3d12.D3D12_SAMPLER_DESC, error) {
 	addressU, err := addressMode(desc.AddressModeU)
 	if err != nil {
 		return d3d12.D3D12_SAMPLER_DESC{}, err
@@ -644,34 +645,34 @@ func samplerDescriptor(desc *SamplerDescriptor) (d3d12.D3D12_SAMPLER_DESC, error
 	}, nil
 }
 
-func addressMode(mode AddressMode) (d3d12.D3D12_TEXTURE_ADDRESS_MODE, error) {
+func addressMode(mode gpu.AddressMode) (d3d12.D3D12_TEXTURE_ADDRESS_MODE, error) {
 	switch mode {
-	case AddressModeClampToEdge:
+	case gpu.AddressModeClampToEdge:
 		return d3d12.D3D12_TEXTURE_ADDRESS_MODE_CLAMP, nil
-	case AddressModeRepeat:
+	case gpu.AddressModeRepeat:
 		return d3d12.D3D12_TEXTURE_ADDRESS_MODE_WRAP, nil
-	case AddressModeMirrorRepeat:
+	case gpu.AddressModeMirrorRepeat:
 		return d3d12.D3D12_TEXTURE_ADDRESS_MODE_MIRROR, nil
 	}
 	return d3d12.D3D12_TEXTURE_ADDRESS_MODE_CLAMP, fmt.Errorf("gpu: address mode %d is not supported", int(mode))
 }
 
-func samplerFilter(desc *SamplerDescriptor) (d3d12.D3D12_FILTER, error) {
-	if desc.MagFilter != FilterModeNearest && desc.MagFilter != FilterModeLinear {
+func samplerFilter(desc *gpu.SamplerDescriptor) (d3d12.D3D12_FILTER, error) {
+	if desc.MagFilter != gpu.FilterModeNearest && desc.MagFilter != gpu.FilterModeLinear {
 		return d3d12.D3D12_FILTER_MIN_MAG_MIP_POINT, fmt.Errorf("gpu: filter mode %d is not supported", int(desc.MagFilter))
 	}
-	if desc.MinFilter != FilterModeNearest && desc.MinFilter != FilterModeLinear {
+	if desc.MinFilter != gpu.FilterModeNearest && desc.MinFilter != gpu.FilterModeLinear {
 		return d3d12.D3D12_FILTER_MIN_MAG_MIP_POINT, fmt.Errorf("gpu: filter mode %d is not supported", int(desc.MinFilter))
 	}
-	if desc.MipmapFilter != MipmapFilterModeNearest && desc.MipmapFilter != MipmapFilterModeLinear {
+	if desc.MipmapFilter != gpu.MipmapFilterModeNearest && desc.MipmapFilter != gpu.MipmapFilterModeLinear {
 		return d3d12.D3D12_FILTER_MIN_MAG_MIP_POINT, fmt.Errorf("gpu: mipmap filter mode %d is not supported", int(desc.MipmapFilter))
 	}
 	if desc.MaxAnisotropy > 1 {
 		return d3d12.D3D12_FILTER_ANISOTROPIC, nil
 	}
-	minLinear := desc.MinFilter == FilterModeLinear
-	magLinear := desc.MagFilter == FilterModeLinear
-	mipLinear := desc.MipmapFilter == MipmapFilterModeLinear
+	minLinear := desc.MinFilter == gpu.FilterModeLinear
+	magLinear := desc.MagFilter == gpu.FilterModeLinear
+	mipLinear := desc.MipmapFilter == gpu.MipmapFilterModeLinear
 	switch {
 	case !minLinear && !magLinear && !mipLinear:
 		return d3d12.D3D12_FILTER_MIN_MAG_MIP_POINT, nil

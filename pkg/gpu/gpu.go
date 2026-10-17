@@ -24,37 +24,20 @@ func (b Backend) String() string {
 
 var ErrNoBackend = errors.New("gpu: no graphics backend available")
 
-type InstanceDescriptor struct {
-	Backends []Backend
-}
-
 type Instance struct {
-	backends []instanceBackend
+	backends []InstanceBackend
 }
 
-func New(desc *InstanceDescriptor) (*Instance, error) {
-	requested := availableBackends()
-	if desc != nil && len(desc.Backends) > 0 {
-		requested = desc.Backends
+func New(backends ...InstanceBackend) (*Instance, error) {
+	if len(backends) == 0 {
+		return nil, ErrNoBackend
 	}
-
-	instance := &Instance{}
-	var errs []error
-	for _, backend := range requested {
-		impl, err := newBackend(backend)
-		if err != nil {
-			errs = append(errs, err)
-			continue
+	for i, backend := range backends {
+		if backend == nil {
+			return nil, fmt.Errorf("gpu: backend %d is nil", i)
 		}
-		instance.backends = append(instance.backends, impl)
 	}
-	if len(instance.backends) == 0 {
-		if len(errs) == 0 {
-			return nil, ErrNoBackend
-		}
-		return nil, errors.Join(errs...)
-	}
-	return instance, nil
+	return &Instance{backends: backends}, nil
 }
 
 type SurfaceTarget struct {
@@ -86,7 +69,7 @@ type RequestAdapterOptions struct {
 }
 
 type Adapter struct {
-	b adapterBackend
+	b AdapterBackend
 }
 
 func (i *Instance) RequestAdapter(opts *RequestAdapterOptions) (*Adapter, error) {
@@ -123,7 +106,7 @@ func (a *Adapter) RequestDevice() (*Device, error) {
 }
 
 type Device struct {
-	b     deviceBackend
+	b     DeviceBackend
 	queue *Queue
 }
 
@@ -140,10 +123,16 @@ func (d *Device) CreateCommandEncoder() (*CommandEncoder, error) {
 func (d *Device) Close() error { return d.b.Close() }
 
 type Queue struct {
-	b queueBackend
+	b QueueBackend
 }
 
-func (q *Queue) Submit(cmds ...*CommandBuffer) error { return q.b.Submit(cmds) }
+func (q *Queue) Submit(cmds ...*CommandBuffer) error {
+	impls := make([]CommandBufferBackend, len(cmds))
+	for i, cmd := range cmds {
+		impls[i] = cmd.b
+	}
+	return q.b.Submit(impls)
+}
 
 type TextureFormat int
 
@@ -168,7 +157,7 @@ type SurfaceConfiguration struct {
 }
 
 type Surface struct {
-	b surfaceBackend
+	b SurfaceBackend
 }
 
 func (s *Surface) Configure(device *Device, config SurfaceConfiguration) error {
@@ -185,8 +174,10 @@ func (s *Surface) AcquireFrame() (*Frame, error) {
 
 func (s *Surface) Close() { s.b.Close() }
 
+func (s *Surface) Backend() SurfaceBackend { return s.b }
+
 type Frame struct {
-	b frameBackend
+	b FrameBackend
 }
 
 func (f *Frame) Texture() *Texture { return &Texture{b: f.b.Texture()} }
@@ -194,10 +185,12 @@ func (f *Frame) Texture() *Texture { return &Texture{b: f.b.Texture()} }
 func (f *Frame) Present() error { return f.b.Present() }
 
 type TextureView struct {
-	b viewBackend
+	b ViewBackend
 }
 
 func (v *TextureView) Destroy() { v.b.Destroy() }
+
+func (v *TextureView) Backend() ViewBackend { return v.b }
 
 type Color struct {
 	R, G, B, A float64
@@ -229,7 +222,7 @@ type RenderPassDescriptor struct {
 }
 
 type CommandEncoder struct {
-	b encoderBackend
+	b EncoderBackend
 }
 
 func (e *CommandEncoder) BeginRenderPass(desc *RenderPassDescriptor) (*RenderPass, error) {
@@ -257,32 +250,32 @@ func (e *CommandEncoder) Finish() (*CommandBuffer, error) {
 }
 
 type CommandBuffer struct {
-	b commandBufferBackend
+	b CommandBufferBackend
 }
 
 type RenderPass struct {
-	b renderPassBackend
+	b RenderPassBackend
 }
 
 func (p *RenderPass) SetPipeline(pipeline *RenderPipeline) error {
 	if pipeline == nil {
 		return errors.New("gpu: cannot set a nil render pipeline")
 	}
-	return p.b.SetPipeline(pipeline)
+	return p.b.SetPipeline(pipeline.b)
 }
 
 func (p *RenderPass) SetVertexBuffer(slot uint32, buffer *Buffer) error {
 	if buffer == nil {
 		return errors.New("gpu: cannot set a nil vertex buffer")
 	}
-	return p.b.SetVertexBuffer(slot, buffer)
+	return p.b.SetVertexBuffer(slot, buffer.b)
 }
 
 func (p *RenderPass) SetBindGroup(index uint32, group *BindGroup) error {
 	if group == nil {
 		return errors.New("gpu: cannot set a nil bind group")
 	}
-	return p.b.SetBindGroup(index, group)
+	return p.b.SetBindGroup(index, group.b)
 }
 
 func (p *RenderPass) SetViewport(x, y, width, height, minDepth, maxDepth float32) error {

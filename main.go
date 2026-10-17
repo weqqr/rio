@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/weqqr/rio/pkg/gpu"
+	"github.com/weqqr/rio/pkg/gpu/d3d12backend"
 	"github.com/weqqr/rio/pkg/renderer"
 	"github.com/weqqr/rio/pkg/wev"
 )
@@ -12,7 +13,11 @@ type App struct {
 
 func (a *App) OnWindowCreated(e *wev.EventLoop, window *wev.Window) error {
 	width, height := window.Size()
-	renderer, err := renderer.New(gpu.SurfaceTarget{
+	backend, err := d3d12backend.New()
+	if err != nil {
+		return err
+	}
+	renderer, err := renderer.New(backend, gpu.SurfaceTarget{
 		Handle: window.RawWindowHandle(),
 		Width:  uint32(width),
 		Height: uint32(height),

@@ -1,91 +1,91 @@
 package gpu
 
-type instanceBackend interface {
+type InstanceBackend interface {
 	Backend() Backend
-	CreateSurface(target SurfaceTarget) (surfaceBackend, error)
-	RequestAdapter(opts *RequestAdapterOptions) (adapterBackend, error)
+	CreateSurface(target SurfaceTarget) (SurfaceBackend, error)
+	RequestAdapter(opts *RequestAdapterOptions) (AdapterBackend, error)
 	Close()
 }
 
-type adapterBackend interface {
-	RequestDevice() (deviceBackend, error)
+type AdapterBackend interface {
+	RequestDevice() (DeviceBackend, error)
 }
 
-type deviceBackend interface {
-	Queue() queueBackend
-	CreateCommandEncoder() (encoderBackend, error)
-	CreateBuffer(desc *BufferDescriptor) (bufferBackend, error)
-	CreateTexture(desc *TextureDescriptor) (textureBackend, error)
-	CreateSampler(desc *SamplerDescriptor) (samplerBackend, error)
-	CreateShaderModule(desc *ShaderModuleDescriptor) (shaderModuleBackend, error)
-	CreateBindGroupLayout(desc *BindGroupLayoutDescriptor) (bindGroupLayoutBackend, error)
-	CreateBindGroup(desc *BindGroupDescriptor) (bindGroupBackend, error)
-	CreatePipelineLayout(desc *PipelineLayoutDescriptor) (pipelineLayoutBackend, error)
-	CreateRenderPipeline(desc *RenderPipelineDescriptor) (renderPipelineBackend, error)
+type DeviceBackend interface {
+	Queue() QueueBackend
+	CreateCommandEncoder() (EncoderBackend, error)
+	CreateBuffer(desc *BufferDescriptor) (BufferBackend, error)
+	CreateTexture(desc *TextureDescriptor) (TextureBackend, error)
+	CreateSampler(desc *SamplerDescriptor) (SamplerBackend, error)
+	CreateShaderModule(desc *ShaderModuleDescriptor) (ShaderModuleBackend, error)
+	CreateBindGroupLayout(desc *BindGroupLayoutDescriptor) (BindGroupLayoutBackend, error)
+	CreateBindGroup(desc *BindGroupDescriptor) (BindGroupBackend, error)
+	CreatePipelineLayout(desc *PipelineLayoutDescriptor) (PipelineLayoutBackend, error)
+	CreateRenderPipeline(desc *RenderPipelineDescriptor) (RenderPipelineBackend, error)
 	Close() error
 }
 
-type queueBackend interface {
-	Submit(cmds []*CommandBuffer) error
-	WriteBuffer(buffer *Buffer, offset uint64, data []byte) error
+type QueueBackend interface {
+	Submit(cmds []CommandBufferBackend) error
+	WriteBuffer(buffer BufferBackend, offset uint64, data []byte) error
 	WriteTexture(dst *ImageCopyTexture, data []byte, layout *ImageDataLayout, size Extent3D) error
 }
 
-type surfaceBackend interface {
-	Configure(device deviceBackend, config SurfaceConfiguration) error
-	AcquireFrame() (frameBackend, error)
+type SurfaceBackend interface {
+	Configure(device DeviceBackend, config SurfaceConfiguration) error
+	AcquireFrame() (FrameBackend, error)
 	Close()
 }
 
-type frameBackend interface {
-	Texture() textureBackend
+type FrameBackend interface {
+	Texture() TextureBackend
 	Present() error
 }
 
-type textureBackend interface {
-	CreateView(desc *TextureViewDescriptor) (viewBackend, error)
+type TextureBackend interface {
+	CreateView(desc *TextureViewDescriptor) (ViewBackend, error)
 	Destroy()
 }
 
-type viewBackend interface {
+type ViewBackend interface {
 	Destroy()
 }
 
-type samplerBackend interface {
+type SamplerBackend interface {
 	Destroy()
 }
 
-type bindGroupLayoutBackend interface {
+type BindGroupLayoutBackend interface {
 	Destroy()
 }
 
-type bindGroupBackend interface {
+type BindGroupBackend interface {
 	Destroy()
 }
 
-type pipelineLayoutBackend interface {
+type PipelineLayoutBackend interface {
 	Destroy()
 }
 
-type encoderBackend interface {
-	BeginRenderPass(desc *RenderPassDescriptor) (renderPassBackend, error)
-	CopyBufferToBuffer(src *Buffer, srcOffset uint64, dst *Buffer, dstOffset uint64, size uint64) error
-	Finish() (commandBufferBackend, error)
+type EncoderBackend interface {
+	BeginRenderPass(desc *RenderPassDescriptor) (RenderPassBackend, error)
+	CopyBufferToBuffer(src BufferBackend, srcOffset uint64, dst BufferBackend, dstOffset uint64, size uint64) error
+	Finish() (CommandBufferBackend, error)
 }
 
-type renderPassBackend interface {
-	SetPipeline(pipeline *RenderPipeline) error
-	SetVertexBuffer(slot uint32, buffer *Buffer) error
-	SetBindGroup(index uint32, group *BindGroup) error
+type RenderPassBackend interface {
+	SetPipeline(pipeline RenderPipelineBackend) error
+	SetVertexBuffer(slot uint32, buffer BufferBackend) error
+	SetBindGroup(index uint32, group BindGroupBackend) error
 	SetViewport(x, y, width, height, minDepth, maxDepth float32) error
 	SetScissorRect(x, y, width, height uint32) error
 	Draw(vertexCount, instanceCount, firstVertex, firstInstance uint32) error
 	End()
 }
 
-type commandBufferBackend interface{}
+type CommandBufferBackend interface{}
 
-type bufferBackend interface {
+type BufferBackend interface {
 	Size() uint64
 	Usage() BufferUsage
 	MapAsync(mode MapMode, offset, size uint64) error
@@ -94,11 +94,11 @@ type bufferBackend interface {
 	Destroy()
 }
 
-type shaderModuleBackend interface {
+type ShaderModuleBackend interface {
 	Code() []byte
 	Destroy()
 }
 
-type renderPipelineBackend interface {
+type RenderPipelineBackend interface {
 	Destroy()
 }
